@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "luxtronik2mqtt"
+version = "0.1.0"
+description = "Bridge between a Luxtronik 2.x heat-pump Controller and an MQTT broker"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Tim Vogler" }]
+requires-python = ">=3.11"
+dependencies = [
+    # SHI support exists only on master; pinned to one commit (ADR 0002).
+    "luxtronik @ git+https://github.com/Bouni/python-luxtronik.git@02afea84bd5bf3ee87445de6f2a42b8029983169",
+    # Imported for its error codes; the version is python-luxtronik's pin.
+    "pyModbusTCP",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "mypy>=1.10"]
+
+[project.scripts]
+luxtronik2mqtt-capture = "luxtronik2mqtt.capture:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+
+[tool.mypy]
+files = ["src", "tests"]
+mypy_path = "tests"
+strict = true
+
+[[tool.mypy.overrides]]
+# Neither library ships type information.
+module = ["luxtronik", "luxtronik.*", "pyModbusTCP", "pyModbusTCP.*"]
+ignore_missing_imports = true

@@ -28,3 +28,7 @@ It also builds the test harness every later ticket uses: the Bridge configured w
 - [ ] Missing `LUX_HOST` or `LUX_MQTT_HOST`, or `LUX_CFI_POLL_INTERVAL` below 2, stops the Bridge at startup with a message naming the variable.
 - [ ] `LUX_MQTT_PREFIX` changes the topic root.
 - [ ] The Bridge can be started locally against a real Controller and broker, read-only.
+
+## Comments
+
+**2026-10-25, from ticket 01:** the first fixture was captured while the heat pump was idle, so it holds `ID_WEB_Temperatur_TVL` = `29.2`, `ID_WEB_WP_BZ_akt` = `no request` and `ID_WEB_VD1out` = `0`. The payload examples above (`38.3`, `heating`, `1`) need values that fit this fixture, or the test sets them first with the fake Controller's `set`.
