@@ -3,7 +3,6 @@
 from collections.abc import Iterator
 
 import pytest
-
 from fake_controller import FakeController
 from harness import FakeClock, Message, Subscriber, broker, env, running_bridge
 

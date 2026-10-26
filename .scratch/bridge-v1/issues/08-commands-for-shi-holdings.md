@@ -20,7 +20,7 @@ This ticket adds Holding writes to the Controller adapter and to the fake Contro
 
 **Blocked by:** 06 (Status topics and outage recovery)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] With `LUX_SHI_WRITE` unset, a Command produces an error and the fake receives no write.
 - [x] With `LUX_SHI_WRITE=true`, `hot_water_setpoint/set` → `45` writes to the fake, and the Holding topic shows the value read back.

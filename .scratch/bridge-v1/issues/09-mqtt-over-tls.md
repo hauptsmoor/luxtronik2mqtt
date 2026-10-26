@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 (Tracer bullet: CFI Calculations to MQTT)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] With `LUX_MQTT_TLS=true` and `LUX_MQTT_CA_FILE` pointing to the test's CA, the Bridge connects to a TLS broker started inside the test, and values arrive.
 - [x] With a CA that doesn't match the broker's certificate, the connection fails with a clear log message and the Bridge doesn't fall back to plain MQTT.

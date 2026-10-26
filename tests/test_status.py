@@ -5,14 +5,25 @@ import os
 import signal
 import subprocess
 import sys
-import time
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
+from itertools import pairwise
 
 import pytest
-
 from fake_controller import FakeController
-from harness import TIMEOUT, FakeClock, Message, Subscriber, broker, env, restartable_broker, running_bridge
+from harness import (
+    TIMEOUT,
+    FakeClock,
+    Message,
+    Subscriber,
+    broker,
+    env,
+    latest,
+    restartable_broker,
+    retained,
+    running_bridge,
+    wait_until,
+)
 from peers import closed_port
 
 STATUS = "luxtronik/status"
@@ -27,31 +38,6 @@ OURS = "luxtronik2mqtt"
 def port() -> Iterator[int]:
     with broker() as port:
         yield port
-
-
-def retained(port: int) -> dict[str, str]:
-    """What a subscriber that connects now gets, by topic."""
-    messages = received_on_connect(port)
-    assert all(m.retained for m in messages)
-    return {m.topic: m.payload for m in messages}
-
-
-def latest(port: int) -> dict[str, str]:
-    """What a subscriber that connects now gets, by topic, retained or not.
-
-    For waiting on a Bridge process the test doesn't step: it may publish while the
-    subscriber connects, and a message published then arrives without the retained flag.
-    """
-    return {m.topic: m.payload for m in received_on_connect(port)}
-
-
-def received_on_connect(port: int) -> list[Message]:
-    """What a subscriber that connects now gets, retained or published while it connects."""
-    subscriber = Subscriber(port)
-    try:
-        return subscriber.sync()
-    finally:
-        subscriber.close()
 
 
 def test_while_the_bridge_runs_every_status_is_online(port: int) -> None:
@@ -81,14 +67,6 @@ def bridge_process(port: int) -> Iterator[subprocess.Popen[bytes]]:
     finally:
         process.kill()
         process.wait(TIMEOUT)
-
-
-def wait_until(condition: Callable[[], bool]) -> None:
-    """Wait in real time, for what happens outside the injected clock."""
-    deadline = time.monotonic() + TIMEOUT
-    while not condition():
-        assert time.monotonic() < deadline, "timed out"
-        time.sleep(0.05)
 
 
 def test_on_sigterm_the_bridge_publishes_offline_before_it_exits(port: int) -> None:
@@ -167,7 +145,7 @@ def test_an_unreachable_cfi_is_retried_with_growing_delays_from_5_up_to_60_secon
                 attempted_at.append(clock.now)
             clock.advance(wait)
 
-    delays = [later - earlier for earlier, later in zip(attempted_at, attempted_at[1:])]
+    delays = [later - earlier for earlier, later in pairwise(attempted_at)]
     assert delays[:6] == [5, 10, 20, 40, 60, 60]
 
 
@@ -221,13 +199,15 @@ def test_a_long_outage_logs_once_when_it_starts_and_once_when_it_recovers(
 
 
 def test_after_a_broker_restart_the_bridge_reconnects_and_republishes_everything() -> None:
-    with restartable_broker() as broker:
-        with running_bridge(env(broker.port), FakeController.from_fixture(), FakeClock()) as bridge:
-            bridge.run_pending()
-            before = retained(broker.port)
+    with (
+        restartable_broker() as broker,
+        running_bridge(env(broker.port), FakeController.from_fixture(), FakeClock()) as bridge,
+    ):
+        bridge.run_pending()
+        before = retained(broker.port)
 
-            broker.restart()
-            assert retained(broker.port) == {}
+        broker.restart()
+        assert retained(broker.port) == {}
 
-            # paho reconnects on its own, in real time.
-            wait_until(lambda: {m.topic: m.payload for m in received_on_connect(broker.port)} == before)
+        # paho reconnects on its own, in real time.
+        wait_until(lambda: latest(broker.port) == before)

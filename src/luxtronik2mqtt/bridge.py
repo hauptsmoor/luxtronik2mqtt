@@ -229,7 +229,7 @@ class Bridge:
         payloads: Payloads = {}
         # Commands only ever set SHI Holdings (ADR 0001).
         writable = vector_path == "shi/holdings"
-        for _, field in vector.items():
+        for field in vector.values():
             path = f"{vector_path}/{field.name}"
             if self._selection.selected(path):
                 value = payload(field)

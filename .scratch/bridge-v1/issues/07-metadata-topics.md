@@ -10,7 +10,7 @@ The meta topic is published when its value topic first appears, and cleared when
 
 **Blocked by:** 03 (SHI Inputs and Holdings published)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] `luxtronik/cfi/calculations/ID_WEB_Temperatur_TVL/meta` holds unit `°C`, type `Celsius` and `writable` false.
 - [x] `luxtronik/shi/holdings/hot_water_mode/meta` holds `writable` true and its allowed modes in `options`.

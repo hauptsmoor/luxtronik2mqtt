@@ -9,7 +9,7 @@ There's no GitHub remote yet, so the workflow can only be checked by reading it 
 
 **Blocked by:** 02 (Tracer bullet: CFI Calculations to MQTT)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] The image builds locally.
 - [x] Started with only `LUX_HOST` and `LUX_MQTT_HOST`, a non-root user and a read-only root filesystem, the container runs the Bridge.

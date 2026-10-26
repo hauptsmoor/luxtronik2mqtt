@@ -3,7 +3,6 @@
 from collections.abc import Iterator
 
 import pytest
-
 from fake_controller import FakeController
 from harness import FakeClock, Message, Subscriber, broker, env, running_bridge
 
@@ -33,9 +32,7 @@ def send(subscriber: Subscriber, name: str, payload: str, wait_for: str) -> dict
     return {m.topic: m.payload for m in arrived if not m.topic.endswith("/set")}
 
 
-def test_with_commands_switched_off_a_command_gets_an_error_and_isnt_written(
-    port: int, subscriber: Subscriber
-) -> None:
+def test_with_commands_switched_off_a_command_gets_an_error_and_isnt_written(port: int, subscriber: Subscriber) -> None:
     controller = FakeController.from_fixture()
     with running_bridge(env(port), controller, FakeClock()) as bridge:
         bridge.run_pending()
@@ -76,9 +73,7 @@ def test_a_mode_command_uses_the_readable_text_the_bridge_publishes(port: int, s
     assert controller.read_holdings().get("heating_mode").value == "Setpoint"
 
 
-def test_a_retained_command_left_at_the_broker_is_rejected_and_not_written(
-    port: int, subscriber: Subscriber
-) -> None:
+def test_a_retained_command_left_at_the_broker_is_rejected_and_not_written(port: int, subscriber: Subscriber) -> None:
     controller = FakeController.from_fixture()
     subscriber.publish(HOLDINGS + "hot_water_setpoint/set", "45", retain=True)
     subscriber.sync()
@@ -145,9 +140,7 @@ def test_with_the_shi_unreachable_a_command_is_rejected(port: int, subscriber: S
     assert arrived == {HOLDINGS + "hot_water_setpoint/error": "rejected: the SHI is unreachable"}
 
 
-def test_a_command_the_shi_doesnt_answer_since_the_last_poll_gets_an_error(
-    port: int, subscriber: Subscriber
-) -> None:
+def test_a_command_the_shi_doesnt_answer_since_the_last_poll_gets_an_error(port: int, subscriber: Subscriber) -> None:
     controller = FakeController.from_fixture()
     with running_bridge(env(port, LUX_SHI_WRITE="true"), controller, FakeClock()) as bridge:
         bridge.run_pending()

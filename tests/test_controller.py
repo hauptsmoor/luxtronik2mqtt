@@ -2,11 +2,11 @@
 
 import time
 
-import pytest
-
 import fixtures
-from luxtronik2mqtt.controller import Controller, Dump, Unreachable
+import pytest
 from peers import closed_port, silent_port, simulated_controller
+
+from luxtronik2mqtt.controller import Controller, Dump, Unreachable
 
 TIMEOUT = 0.5
 
@@ -144,10 +144,11 @@ def test_a_negative_value_is_written_as_the_register_holds_it() -> None:
     assert (written.accepted, written.requested.value, written.read_back.value) == (True, -2.0, -2.0)
 
 
-@pytest.mark.parametrize(("name", "value"), [("hot_water_setpoint", "-5"), ("hot_water_setpoint", "7000"), ("heating_offset", "4000")])
+@pytest.mark.parametrize(
+    ("name", "value"), [("hot_water_setpoint", "-5"), ("hot_water_setpoint", "7000"), ("heating_offset", "4000")]
+)
 def test_a_value_that_doesnt_fit_the_register_is_refused_before_anything_is_sent(name: str, value: str) -> None:
-    with simulated_controller(fixtures.load(), accept_writes=True) as simulated:
-        with pytest.raises(ValueError):
-            simulated.controller().write_holding(name, value)
+    with simulated_controller(fixtures.load(), accept_writes=True) as simulated, pytest.raises(ValueError):
+        simulated.controller().write_holding(name, value)
 
     assert simulated.writes == []

@@ -253,7 +253,9 @@ class _Modbus(LuxtronikModbusTcpInterface):  # type: ignore[misc]
         valid: bool = super()._read_register(read_reg_cb, telegram)
         if valid:
             vector = "holdings" if isinstance(telegram, LuxtronikSmartHomeReadHoldingsTelegram) else "inputs"
-            self.registers[vector].update(zip(range(telegram.addr, telegram.addr + telegram.count), telegram.data))
+            self.registers[vector].update(
+                zip(range(telegram.addr, telegram.addr + telegram.count), telegram.data, strict=False)
+            )
         elif self._client.last_error != MB_EXCEPT_ERR:
             self.failure = self._client.last_error_as_txt
         return valid

@@ -7,18 +7,18 @@ import subprocess
 import tempfile
 import threading
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 import paho.mqtt.client as mqtt
-from paho.mqtt.enums import CallbackAPIVersion
-
 from fake_controller import FakeController
+from paho.mqtt.enums import CallbackAPIVersion
+from peers import closed_port
+
 from luxtronik2mqtt.bridge import Bridge
 from luxtronik2mqtt.config import Settings
-from peers import closed_port
 
 TIMEOUT = 5.0
 _SYNC_TOPIC = "test/sync"
@@ -55,11 +55,39 @@ def broker_certificates(directory: Path) -> Certificates:
     extensions = directory / "broker.ext"
     extensions.write_text("subjectAltName = IP:127.0.0.1\n")
     for command in (
-        ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=Test CA",
-         "-keyout", ca_key, "-out", files.ca],
+        [
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-days",
+            "1",
+            "-subj",
+            "/CN=Test CA",
+            "-keyout",
+            ca_key,
+            "-out",
+            files.ca,
+        ],
         ["req", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=127.0.0.1", "-keyout", files.key, "-out", request],
-        ["x509", "-req", "-in", request, "-CA", files.ca, "-CAkey", ca_key, "-CAcreateserial", "-days", "1",
-         "-extfile", extensions, "-out", files.certificate],
+        [
+            "x509",
+            "-req",
+            "-in",
+            request,
+            "-CA",
+            files.ca,
+            "-CAkey",
+            ca_key,
+            "-CAcreateserial",
+            "-days",
+            "1",
+            "-extfile",
+            extensions,
+            "-out",
+            files.certificate,
+        ],
     ):
         subprocess.run(["openssl", *map(str, command)], check=True, capture_output=True)
     return files
@@ -79,7 +107,12 @@ class Broker:
         self._config = config
         # No limit on queued messages: a subscriber that connects late gets every retained topic,
         # over 1,000 with meta topics once Visibilities are included, and mosquitto drops those above 1,000 by default.
-        lines = [f"listener {self.port} 127.0.0.1", "allow_anonymous true", "persistence false", "max_queued_messages 0"]
+        lines = [
+            f"listener {self.port} 127.0.0.1",
+            "allow_anonymous true",
+            "persistence false",
+            "max_queued_messages 0",
+        ]
         if certificates is not None:
             self._ports.append(self.tls_port)
             lines += [
@@ -177,9 +210,7 @@ class Subscriber:
         marker = str(self._syncs)
         self._client.publish(_SYNC_TOPIC, marker, qos=1)
         with self._changed:
-            arrived = self._changed.wait_for(
-                lambda: Message(_SYNC_TOPIC, marker, False) in self.messages, TIMEOUT
-            )
+            arrived = self._changed.wait_for(lambda: Message(_SYNC_TOPIC, marker, False) in self.messages, TIMEOUT)
             assert arrived, "the sync message didn't come back"
             received = [m for m in self.messages if m.topic != _SYNC_TOPIC]
             self.messages.clear()
@@ -203,6 +234,44 @@ class Subscriber:
         with self._changed:
             self.messages.append(Message(message.topic, message.payload.decode(), bool(message.retain)))
             self._changed.notify_all()
+
+
+def received_on_connect(port: int) -> list[Message]:
+    """What a subscriber that connects now gets, retained or published while it connects."""
+    subscriber = Subscriber(port)
+    try:
+        return subscriber.sync()
+    finally:
+        subscriber.close()
+
+
+def retained(port: int) -> dict[str, str]:
+    """What a subscriber that connects now gets, by topic, all of it retained.
+
+    Only for a Bridge the test steps with `run_pending` or has stopped: under MQTT 3.1.1
+    the broker sets the retained flag only on what it sends because of the subscription,
+    so a message published while the subscriber connects arrives without it.
+    """
+    messages = received_on_connect(port)
+    assert all(m.retained for m in messages)
+    return {m.topic: m.payload for m in messages}
+
+
+def latest(port: int) -> dict[str, str]:
+    """What a subscriber that connects now gets, by topic, retained or not.
+
+    For waiting on a Bridge the test doesn't step, such as one in its own process:
+    it may publish while the subscriber connects (see `retained`).
+    """
+    return {m.topic: m.payload for m in received_on_connect(port)}
+
+
+def wait_until(condition: Callable[[], bool]) -> None:
+    """Wait in real time, for what happens outside the injected clock."""
+    deadline = time.monotonic() + TIMEOUT
+    while not condition():
+        assert time.monotonic() < deadline, "timed out"
+        time.sleep(0.05)
 
 
 class FakeClock:

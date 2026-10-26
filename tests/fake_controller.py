@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import fixtures
+
 from luxtronik2mqtt.controller import Dump, HoldingWrite, Unreachable, holding_to_write
 
 

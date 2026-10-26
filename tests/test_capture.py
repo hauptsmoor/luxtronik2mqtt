@@ -1,11 +1,11 @@
 """The dump-capture command against a simulated Controller."""
 
-import pytest
-
 import fixtures
+import pytest
+from peers import closed_port, simulated_controller
+
 from luxtronik2mqtt.capture import main
 from luxtronik2mqtt.controller import Dump
-from peers import closed_port, simulated_controller
 
 # IPv4 addresses as the CFI sends them: big-endian, as a signed 32-bit register.
 IP_172_16_5_20 = -1408236268
@@ -64,7 +64,15 @@ def test_capture_replaces_copies_of_the_addresses_in_the_parameters(capsys: pyte
     captured = capture(dump, capsys)
 
     # A mask is too common a value to match: -512 might as well be a temperature of -51.2.
-    assert captured.cfi["parameters"] == [5, IP_192_0_2_10, MASK_255_255_254_0, IP_192_0_2_255, IP_192_0_2_1, 0, IP_192_0_2_1]
+    assert captured.cfi["parameters"] == [
+        5,
+        IP_192_0_2_10,
+        MASK_255_255_254_0,
+        IP_192_0_2_255,
+        IP_192_0_2_1,
+        0,
+        IP_192_0_2_1,
+    ]
 
 
 def test_capture_leaves_other_registers_alone_when_the_controller_has_no_address(
@@ -78,4 +86,11 @@ def test_capture_leaves_other_registers_alone_when_the_controller_has_no_address
     captured = capture(dump, capsys)
 
     assert captured.cfi["parameters"] == [0, 1, 0]
-    assert captured.cfi["calculations"][90:96] == [90, IP_192_0_2_10, MASK_255_255_255_0, IP_192_0_2_255, IP_192_0_2_1, 95]
+    assert captured.cfi["calculations"][90:96] == [
+        90,
+        IP_192_0_2_10,
+        MASK_255_255_255_0,
+        IP_192_0_2_255,
+        IP_192_0_2_1,
+        95,
+    ]

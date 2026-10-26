@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 (Tracer bullet: CFI Calculations to MQTT)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] With no value changes, a subscriber receives every selected topic again once the republish interval passes on the injected clock, and not before.
 - [x] Polls between republishes publish only changed values.

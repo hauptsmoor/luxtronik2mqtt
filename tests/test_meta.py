@@ -5,9 +5,8 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-
 from fake_controller import FakeController
-from harness import FakeClock, Subscriber, broker, env, running_bridge
+from harness import FakeClock, Subscriber, broker, env, retained, running_bridge
 
 CALCULATIONS = "luxtronik/cfi/calculations/"
 HOLDINGS = "luxtronik/shi/holdings/"
@@ -23,13 +22,7 @@ def retained_after_first_poll(controller: FakeController, port: int) -> dict[str
     """Run one poll, then return what a subscriber that connects afterwards gets, by topic."""
     with running_bridge(env(port), controller, FakeClock()) as bridge:
         bridge.run_pending()
-    subscriber = Subscriber(port)
-    try:
-        messages = subscriber.sync()
-    finally:
-        subscriber.close()
-    assert all(m.retained for m in messages)
-    return {m.topic: m.payload for m in messages}
+    return retained(port)
 
 
 def meta_of(retained: dict[str, str], topic: str) -> Any:

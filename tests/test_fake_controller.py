@@ -3,12 +3,12 @@
 from collections.abc import Callable
 from typing import Any
 
-import pytest
-
 import fixtures
+import pytest
 from fake_controller import FakeController
-from luxtronik2mqtt.controller import Unreachable
 from peers import simulated_controller
+
+from luxtronik2mqtt.controller import Unreachable
 
 READS = ["read_parameters", "read_calculations", "read_visibilities", "read_inputs", "read_holdings"]
 

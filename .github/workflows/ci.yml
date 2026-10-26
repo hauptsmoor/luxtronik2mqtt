@@ -27,6 +27,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends mosquitto
           sudo systemctl disable --now mosquitto
       - run: pip install '.[dev]'
+      - run: ruff check
+      - run: ruff format --check
       - run: mypy
       - run: pytest
 

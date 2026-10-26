@@ -125,7 +125,7 @@ class _Registers(DataBank):  # type: ignore[misc]
         addresses = range(address, address + len(word_list))
         if not self._accept_writes or any(a not in self._registers["holdings"] for a in addresses):
             return None
-        self._registers["holdings"].update(zip(addresses, word_list))
+        self._registers["holdings"].update(zip(addresses, word_list, strict=True))
         return True
 
     def set_coils(self, address: int, bit_list: list[bool], srv_info: Any = None) -> None:

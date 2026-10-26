@@ -1,5 +1,6 @@
 """Publishing: the MQTT connection, and the last payload published on each topic."""
 
+import contextlib
 import logging
 import threading
 import time
@@ -79,7 +80,10 @@ class Publisher:
         self._subscriptions[path] = receive
 
     def connect(self) -> None:
-        """Connect to the broker. Raises OSError if it can't be reached or refuses; after that, paho reconnects on its own."""
+        """Connect to the broker. Raises OSError if it can't be reached or refuses.
+
+        After that, paho reconnects on its own.
+        """
         self._client.connect(self._settings.mqtt_host, self._settings.mqtt_port)
         self._client.loop_start()
         if not self._connect_answered.wait(ACK_TIMEOUT) or self._refusal is not None:
@@ -119,7 +123,10 @@ class Publisher:
         return set(changed)
 
     def publish_once(self, path: str, payload: str) -> None:
-        """Publish a payload that isn't retained or remembered. While disconnected it's dropped. Waits like `publish_changes`."""
+        """Publish a payload that isn't retained or remembered. Waits like `publish_changes`.
+
+        While disconnected it's dropped.
+        """
         with self._lock:
             sent = [self._client.publish(f"{self._prefix}/{path}", payload, qos=1)] if self._online else []
         self._wait(sent)
@@ -179,7 +186,9 @@ class Publisher:
         with self._lock:
             was_online, self._online = self._online, False
         if was_online and reason_code.is_failure:
-            LOGGER.warning("lost the connection to MQTT broker %s:%s (%s). Reconnecting.", *self._address(), reason_code)
+            LOGGER.warning(
+                "lost the connection to MQTT broker %s:%s (%s). Reconnecting.", *self._address(), reason_code
+            )
 
     def _on_message(self, client: mqtt.Client, userdata: object, message: mqtt.MQTTMessage) -> None:
         path = message.topic.removeprefix(self._prefix + "/")
@@ -209,7 +218,5 @@ class Publisher:
         """Wait until the broker has acknowledged these, or it's taking too long. Not in paho's network thread."""
         deadline = time.monotonic() + ACK_TIMEOUT
         for info in sent:
-            try:
+            with contextlib.suppress(RuntimeError, ValueError):
                 info.wait_for_publish(max(deadline - time.monotonic(), 0))
-            except (RuntimeError, ValueError):
-                pass

@@ -15,7 +15,7 @@ The first fixture comes from the maintainer's Controller (Luxtronik 2.1, V3.92.1
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] The package installs with python-luxtronik pinned to the commit above; the test runner runs and the license file is MIT.
 - [x] The capture command reads all CFI and SHI vectors read-only and writes a fixture to stdout.

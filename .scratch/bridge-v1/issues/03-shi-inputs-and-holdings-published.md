@@ -6,7 +6,7 @@ The SHI is polled on its own interval, `LUX_SHI_POLL_INTERVAL` (default 30 s, mi
 
 **Blocked by:** 02 (Tracer bullet: CFI Calculations to MQTT)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] With the fixture loaded, a subscriber receives retained `luxtronik/shi/inputs/<name>` and `luxtronik/shi/holdings/<name>` topics for every field that has a value.
 - [x] No topic exists for fields that have no value, for example `mc1_heat_mode`.

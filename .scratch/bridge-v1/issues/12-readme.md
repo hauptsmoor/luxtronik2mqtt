@@ -17,7 +17,7 @@ Use the glossary terms throughout.
 
 **Blocked by:** 04 (Include/exclude patterns), 05 (Regular full republish), 06 (Status topics and outage recovery), 07 (Metadata topics), 08 (Commands for SHI Holdings), 09 (MQTT over TLS), 10 (Docker image and CI)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] Every ENV variable the Bridge reads is in the table with its default and matches the code.
 - [x] Every topic the Bridge publishes or subscribes to is documented with retain behaviour and an example payload.

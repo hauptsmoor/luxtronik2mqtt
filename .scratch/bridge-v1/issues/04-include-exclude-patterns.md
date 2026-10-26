@@ -8,7 +8,7 @@ Patterns apply to every topic path, CFI and SHI alike. This is how users switch 
 
 **Blocked by:** 03 (SHI Inputs and Holdings published)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] `LUX_INCLUDE=cfi/parameters/ID_Einst_BWS_*` publishes the matching Parameters, and all default Calculations and SHI fields are still published.
 - [x] `LUX_INCLUDE=cfi/visibilities/*` publishes Visibilities.

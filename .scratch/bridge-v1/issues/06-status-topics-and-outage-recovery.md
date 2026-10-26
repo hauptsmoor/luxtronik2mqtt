@@ -12,7 +12,7 @@
 
 **Blocked by:** 03 (SHI Inputs and Holdings published)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] While the Bridge runs, `status`, `cfi/status` and `shi/status` are retained `online`.
 - [x] When the Bridge's MQTT connection drops without a clean disconnect, the broker publishes `status` → `offline` through the Last Will.

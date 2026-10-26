@@ -285,7 +285,7 @@ pip install -e '.[dev]'
 ```
 
 ```bash
-mypy && pytest
+ruff check && ruff format --check && mypy && pytest
 ```
 
 ## License

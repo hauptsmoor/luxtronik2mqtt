@@ -3,9 +3,8 @@
 from collections.abc import Iterator
 
 import pytest
-
 from fake_controller import FakeController
-from harness import FakeClock, Message, Subscriber, broker, env, running_bridge
+from harness import FakeClock, Message, Subscriber, broker, env, retained, running_bridge
 
 INPUTS = "luxtronik/shi/inputs/"
 HOLDINGS = "luxtronik/shi/holdings/"
@@ -21,13 +20,7 @@ def retained_after_first_poll(controller: FakeController, port: int) -> dict[str
     """Run one poll, then return what a subscriber that connects afterwards gets, by topic."""
     with running_bridge(env(port), controller, FakeClock()) as bridge:
         bridge.run_pending()
-    subscriber = Subscriber(port)
-    try:
-        messages = subscriber.sync()
-    finally:
-        subscriber.close()
-    assert all(m.retained for m in messages)
-    return {m.topic: m.payload for m in messages}
+    return retained(port)
 
 
 def test_every_input_and_holding_with_a_value_is_a_retained_topic(port: int) -> None:

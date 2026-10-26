@@ -6,7 +6,7 @@ There's no GitHub remote yet, so this can only be checked by reading the workflo
 
 **Blocked by:** 10 (Docker image and CI)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] A `vX.Y.Z` tag triggers the workflow; other pushes don't.
 - [x] The workflow builds amd64, arm64 and armv7 and pushes them as one multi-architecture image to GHCR, tagged `X.Y.Z` and `latest`.

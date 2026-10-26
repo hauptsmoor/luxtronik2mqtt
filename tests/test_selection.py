@@ -3,9 +3,9 @@
 from collections.abc import Iterator
 
 import pytest
-
 from fake_controller import FakeController
-from harness import FakeClock, Subscriber, broker, env, running_bridge
+from harness import FakeClock, broker, env, retained, running_bridge
+
 from luxtronik2mqtt.config import Settings
 
 PREFIX = "luxtronik/"
@@ -21,13 +21,7 @@ def retained_after_first_poll(port: int, **overrides: str) -> set[str]:
     """Run one poll with this ENV, then return the topics a subscriber that connects afterwards gets."""
     with running_bridge(env(port, **overrides), FakeController.from_fixture(), FakeClock()) as bridge:
         bridge.run_pending()
-    subscriber = Subscriber(port)
-    try:
-        messages = subscriber.sync()
-    finally:
-        subscriber.close()
-    assert all(m.retained for m in messages)
-    return {m.topic.removeprefix(PREFIX) for m in messages}
+    return {topic.removeprefix(PREFIX) for topic in retained(port)}
 
 
 def under(topics: set[str], vector_path: str) -> set[str]:
@@ -86,7 +80,10 @@ def test_an_exclude_wins_over_an_include(port: int) -> None:
 @pytest.mark.parametrize(
     ("value", "patterns"),
     [
-        (" cfi/parameters/ID_Einst_BWS_* ,  cfi/visibilities/* ", ("cfi/parameters/ID_Einst_BWS_*", "cfi/visibilities/*")),
+        (
+            " cfi/parameters/ID_Einst_BWS_* ,  cfi/visibilities/* ",
+            ("cfi/parameters/ID_Einst_BWS_*", "cfi/visibilities/*"),
+        ),
         ("shi/inputs/*,,", ("shi/inputs/*",)),
         ("", ()),
         ("  ", ()),

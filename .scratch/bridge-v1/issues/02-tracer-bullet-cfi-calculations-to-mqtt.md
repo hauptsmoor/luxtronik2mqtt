@@ -19,7 +19,7 @@ It also builds the test harness every later ticket uses: the Bridge configured w
 
 **Blocked by:** 01 (Controller adapter, dump capture and first fixture)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] With the fixture loaded, a subscriber receives retained `luxtronik/cfi/calculations/<name>` topics for all known Calculations, and none for `Unknown_*` or `ID_WEB_SoftStand_<n>`.
 - [x] Payloads follow the rules: after the test sets them with the fake Controller's `set` (the fixture was captured idle), `ID_WEB_Temperatur_TVL` → `38.3`, `ID_WEB_WP_BZ_akt` → `heating`, `ID_WEB_VD1out` → `1`; `ID_WEB_ERROR_Time0` → an ISO 8601 UTC timestamp with `Z`, `ID_WEB_AdresseIP_akt` → dotted text.
