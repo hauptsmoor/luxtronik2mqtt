@@ -1,0 +1,51 @@
+name: Release
+
+# Releasing is one command: git tag vX.Y.Z && git push origin vX.Y.Z
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+# Read-only for the CI jobs too; only publish may write packages.
+permissions:
+  contents: read
+
+# One release at a time, so two tags pushed together can't race on latest.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # The same tests and image check as on pull requests; nothing is published if they fail.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      # QEMU builds the arm64 and armv7 images on the amd64 runner.
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Tags vX.Y.Z as X.Y.Z and latest; the action lowercases the owner, as GHCR requires.
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/luxtronik2mqtt
+          tags: type=semver,pattern={{version}}
+          flavor: latest=true
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
