@@ -30,6 +30,8 @@ class Settings:
     mqtt_password: str | None = None
     mqtt_prefix: str = "luxtronik"
     log_level: str = "INFO"
+    include: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> "Settings":
@@ -47,6 +49,8 @@ class Settings:
             mqtt_password=env.get("LUX_MQTT_PASSWORD"),
             mqtt_prefix=_prefix(env, "LUX_MQTT_PREFIX"),
             log_level=_log_level(env, "LUX_LOG_LEVEL"),
+            include=_patterns(env, "LUX_INCLUDE"),
+            exclude=_patterns(env, "LUX_EXCLUDE"),
         )
 
 
@@ -92,3 +96,8 @@ def _log_level(env: Mapping[str, str], variable: str) -> str:
     if level not in logging.getLevelNamesMapping():
         raise ConfigError(variable, f"must be a log level such as DEBUG, INFO or WARNING, not {env[variable]!r}")
     return level
+
+
+def _patterns(env: Mapping[str, str], variable: str) -> tuple[str, ...]:
+    patterns = (pattern.strip() for pattern in env.get(variable, "").split(","))
+    return tuple(pattern for pattern in patterns if pattern)

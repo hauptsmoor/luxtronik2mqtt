@@ -9,7 +9,7 @@ from luxtronik2mqtt.config import Settings
 from luxtronik2mqtt.controller import Unreachable
 from luxtronik2mqtt.formatting import payload
 from luxtronik2mqtt.publishing import Publisher
-from luxtronik2mqtt.selection import selected
+from luxtronik2mqtt.selection import Selection
 
 LOGGER = logging.getLogger(__name__)
 
@@ -35,6 +35,10 @@ class ControllerReader(Protocol):
     """What the Bridge needs from the Controller adapter, or from a fake one in tests."""
 
     def read_calculations(self) -> Any: ...
+
+    def read_parameters(self) -> Any: ...
+
+    def read_visibilities(self) -> Any: ...
 
     def read_inputs(self) -> Any: ...
 
@@ -71,6 +75,15 @@ class Bridge:
         self._controller = controller
         self._clock = clock or SystemClock()
         self._publisher = Publisher(settings)
+        self._selection = Selection(settings.include, settings.exclude)
+        # A CFI vector is read only when the defaults or an include can select some of its values,
+        # so Parameters and Visibilities are left alone unless included.
+        cfi_vectors = (
+            ("cfi/calculations", controller.read_calculations),
+            ("cfi/parameters", controller.read_parameters),
+            ("cfi/visibilities", controller.read_visibilities),
+        )
+        self._cfi_vectors = [(path, read) for path, read in cfi_vectors if self._selection.reaches(path)]
         self._polls = (
             _Poll(settings.cfi_poll_interval, self._read_cfi),
             _Poll(settings.shi_poll_interval, self._read_shi),
@@ -98,12 +111,14 @@ class Bridge:
         return max(min(poll.due for poll in self._polls) - now, 0.0)
 
     def _read_cfi(self) -> Payloads | None:
+        payloads: Payloads = {}
         try:
-            calculations = self._controller.read_calculations()
+            for vector_path, read in self._cfi_vectors:
+                payloads |= self._payloads(vector_path, read())
         except Unreachable as error:
             LOGGER.warning("%s", error)
             return None
-        return _payloads("cfi/calculations", calculations)
+        return payloads
 
     def _read_shi(self) -> Payloads | None:
         try:
@@ -112,14 +127,13 @@ class Bridge:
         except Unreachable as error:
             LOGGER.warning("%s", error)
             return None
-        return _payloads("shi/inputs", inputs) | _payloads("shi/holdings", holdings)
+        return self._payloads("shi/inputs", inputs) | self._payloads("shi/holdings", holdings)
 
-
-def _payloads(vector_path: str, vector: Any) -> Payloads:
-    """The payload of each selected field in this vector."""
-    payloads = {}
-    for _, field in vector.items():
-        path = f"{vector_path}/{field.name}"
-        if selected(path):
-            payloads[path] = payload(field)
-    return payloads
+    def _payloads(self, vector_path: str, vector: Any) -> Payloads:
+        """The payload of each selected field in this vector."""
+        payloads = {}
+        for _, field in vector.items():
+            path = f"{vector_path}/{field.name}"
+            if self._selection.selected(path):
+                payloads[path] = payload(field)
+        return payloads
