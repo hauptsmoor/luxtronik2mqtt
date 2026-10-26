@@ -48,6 +48,9 @@ class Publisher:
             client_id="luxtronik2mqtt-" + self._prefix.replace("/", "-"),
             protocol=mqtt.MQTTv311,
         )
+        if settings.mqtt_tls:
+            # Checks the certificate and host name, against the system's CAs unless a CA file is set.
+            self._client.tls_set(ca_certs=settings.mqtt_ca_file)
         if settings.mqtt_username is not None:
             self._client.username_pw_set(settings.mqtt_username, settings.mqtt_password)
         # The broker sets the status offline if the Bridge goes without disconnecting.

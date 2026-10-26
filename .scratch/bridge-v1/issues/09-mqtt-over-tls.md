@@ -6,7 +6,9 @@
 
 **Status:** ready-for-agent
 
-- [ ] With `LUX_MQTT_TLS=true` and `LUX_MQTT_CA_FILE` pointing to the test's CA, the Bridge connects to a TLS broker started inside the test, and values arrive.
-- [ ] With a CA that doesn't match the broker's certificate, the connection fails with a clear log message and the Bridge doesn't fall back to plain MQTT.
-- [ ] A `LUX_MQTT_CA_FILE` that doesn't exist stops the Bridge at startup with a message naming the variable.
-- [ ] With `LUX_MQTT_TLS` unset, the Bridge connects without TLS as before.
+- [x] With `LUX_MQTT_TLS=true` and `LUX_MQTT_CA_FILE` pointing to the test's CA, the Bridge connects to a TLS broker started inside the test, and values arrive.
+- [x] With a CA that doesn't match the broker's certificate, the connection fails with a clear log message and the Bridge doesn't fall back to plain MQTT.
+- [x] A `LUX_MQTT_CA_FILE` that doesn't exist stops the Bridge at startup with a message naming the variable.
+- [x] With `LUX_MQTT_TLS` unset, the Bridge connects without TLS as before.
+
+A `LUX_MQTT_CA_FILE` without `LUX_MQTT_TLS=true` also stops the Bridge at startup, rather than being ignored: an owner who set a CA but forgot the switch would otherwise run on plain MQTT believing the connection secure.

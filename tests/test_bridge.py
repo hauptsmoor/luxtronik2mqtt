@@ -132,6 +132,13 @@ def test_the_prefix_sets_the_topic_root(port: int) -> None:
         ({"LUX_HOST": "controller", "LUX_MQTT_HOST": "broker", "LUX_REPUBLISH_INTERVAL": "0"}, "LUX_REPUBLISH_INTERVAL"),
         ({"LUX_HOST": "controller", "LUX_MQTT_HOST": "broker", "LUX_SHI_WRITE": "yes"}, "LUX_SHI_WRITE"),
         ({"LUX_HOST": "controller", "LUX_MQTT_HOST": "broker", "LUX_MQTT_PORT": "0"}, "LUX_MQTT_PORT"),
+        ({"LUX_HOST": "controller", "LUX_MQTT_HOST": "broker", "LUX_MQTT_TLS": "on"}, "LUX_MQTT_TLS"),
+        (
+            {"LUX_HOST": "controller", "LUX_MQTT_HOST": "broker", "LUX_MQTT_TLS": "true", "LUX_MQTT_CA_FILE": "/nonexistent/ca.crt"},
+            "LUX_MQTT_CA_FILE",
+        ),
+        # A readable file, but no TLS to use it with.
+        ({"LUX_HOST": "controller", "LUX_MQTT_HOST": "broker", "LUX_MQTT_CA_FILE": __file__}, "LUX_MQTT_CA_FILE"),
     ],
 )
 def test_a_missing_or_invalid_setting_stops_the_bridge_at_startup(

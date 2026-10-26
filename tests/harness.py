@@ -37,17 +37,58 @@ def _mosquitto() -> str:
     )
 
 
-class Broker:
-    """A mosquitto broker on localhost that a test can restart on the same port. It forgets everything on restart."""
+@dataclass(frozen=True)
+class Certificates:
+    """A CA, and a certificate for 127.0.0.1 it signed, as files."""
 
-    def __init__(self, config: Path) -> None:
+    ca: Path
+    certificate: Path
+    key: Path
+
+
+def broker_certificates(directory: Path) -> Certificates:
+    """A new CA in this directory, with a certificate for a broker on 127.0.0.1."""
+    directory.mkdir(parents=True, exist_ok=True)
+    files = Certificates(directory / "ca.crt", directory / "broker.crt", directory / "broker.key")
+    ca_key = directory / "ca.key"
+    request = directory / "broker.csr"
+    extensions = directory / "broker.ext"
+    extensions.write_text("subjectAltName = IP:127.0.0.1\n")
+    for command in (
+        ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=Test CA",
+         "-keyout", ca_key, "-out", files.ca],
+        ["req", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=127.0.0.1", "-keyout", files.key, "-out", request],
+        ["x509", "-req", "-in", request, "-CA", files.ca, "-CAkey", ca_key, "-CAcreateserial", "-days", "1",
+         "-extfile", extensions, "-out", files.certificate],
+    ):
+        subprocess.run(["openssl", *map(str, command)], check=True, capture_output=True)
+    return files
+
+
+class Broker:
+    """A mosquitto broker on localhost that a test can restart on the same port. It forgets everything on restart.
+
+    With certificates, it also listens with TLS on `tls_port`. Test clients use the plain `port`.
+    """
+
+    def __init__(self, config: Path, certificates: Certificates | None = None) -> None:
         self.port = closed_port()
+        # Reserved either way; only listened on with certificates.
+        self.tls_port = closed_port()
+        self._ports = [self.port]
         self._config = config
         # No limit on queued messages: a subscriber that connects late gets every retained topic,
         # over 1,000 with meta topics once Visibilities are included, and mosquitto drops those above 1,000 by default.
-        config.write_text(
-            f"listener {self.port} 127.0.0.1\nallow_anonymous true\npersistence false\nmax_queued_messages 0\n"
-        )
+        lines = [f"listener {self.port} 127.0.0.1", "allow_anonymous true", "persistence false", "max_queued_messages 0"]
+        if certificates is not None:
+            self._ports.append(self.tls_port)
+            lines += [
+                f"listener {self.tls_port} 127.0.0.1",
+                f"cafile {certificates.ca}",
+                f"certfile {certificates.certificate}",
+                f"keyfile {certificates.key}",
+            ]
+        config.write_text("\n".join(lines) + "\n")
         self._process = self._start()
 
     def restart(self) -> None:
@@ -62,15 +103,16 @@ class Broker:
         process = subprocess.Popen(
             [_mosquitto(), "-c", str(self._config)], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
         )
-        _wait_until_listening(self.port, process)
+        for port in self._ports:
+            _wait_until_listening(port, process)
         return process
 
 
 @contextmanager
-def restartable_broker() -> Iterator[Broker]:
+def restartable_broker(certificates: Certificates | None = None) -> Iterator[Broker]:
     """A broker running until the block ends."""
     with tempfile.TemporaryDirectory() as directory:
-        broker = Broker(Path(directory) / "mosquitto.conf")
+        broker = Broker(Path(directory) / "mosquitto.conf", certificates)
         try:
             yield broker
         finally:
