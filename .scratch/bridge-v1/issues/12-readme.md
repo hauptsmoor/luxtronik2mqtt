@@ -19,9 +19,11 @@ Use the glossary terms throughout.
 
 **Status:** ready-for-agent
 
-- [ ] Every ENV variable the Bridge reads is in the table with its default and matches the code.
-- [ ] Every topic the Bridge publishes or subscribes to is documented with retain behaviour and an example payload.
-- [ ] The Telegraf example parses at least one CFI and one SHI topic correctly when tried against a test broker.
-- [ ] The SHI section explains how to switch it on, the firmware requirement and the CFI-only behaviour.
-- [ ] The Commands section shows a `/set` example and carries the reboot and compressor-wear warnings.
-- [ ] The contributing section explains how to capture and submit a fixture.
+- [x] Every ENV variable the Bridge reads is in the table with its default and matches the code.
+- [x] Every topic the Bridge publishes or subscribes to is documented with retain behaviour and an example payload.
+- [x] The Telegraf example parses at least one CFI and one SHI topic correctly when tried against a test broker.
+- [x] The SHI section explains how to switch it on, the firmware requirement and the CFI-only behaviour.
+- [x] The Commands section shows a `/set` example and carries the reboot and compressor-wear warnings.
+- [x] The contributing section explains how to capture and submit a fixture.
+
+The Telegraf example was tried with the `telegraf:1.36` image against a mosquitto broker, with the real Bridge publishing the fixture's values. It produced 227 CFI Calculations, 45 SHI Inputs, 19 SHI Holdings and one included Parameter, each as its own field. The example uses the `grok` parser, not `data_format = "value"`, because the `value` parser keeps only the last word of a payload (`no request` became `request`). Where the code differs from the spec, the README follows the code: durations publish in python-luxtronik's unit, seconds, not hours. The image name is written `ghcr.io/OWNER/luxtronik2mqtt` until there's a GitHub remote.
