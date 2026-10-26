@@ -11,11 +11,13 @@ There's no GitHub remote yet, so the workflow can only be checked by reading it 
 
 **Status:** ready-for-agent
 
-- [ ] The image builds locally.
-- [ ] Started with only `LUX_HOST` and `LUX_MQTT_HOST`, a non-root user and a read-only root filesystem, the container runs the Bridge.
-- [ ] The capture command runs from the same image and writes the fixture to stdout.
-- [ ] The container stops cleanly on SIGTERM (and publishes `offline` once ticket 06 is in).
-- [ ] The CI workflow runs the full test suite on pull requests and on pushes to `main`; its steps pass when run locally.
+- [x] The image builds locally.
+- [x] Started with only `LUX_HOST` and `LUX_MQTT_HOST`, a non-root user and a read-only root filesystem, the container runs the Bridge.
+- [x] The capture command runs from the same image and writes the fixture to stdout.
+- [x] The container stops cleanly on SIGTERM (and publishes `offline` once ticket 06 is in).
+- [x] The CI workflow runs the full test suite on pull requests and on pushes to `main`; its steps pass when run locally.
+
+The workflow hasn't run on GitHub yet: its steps were run locally in `python:3.11-slim` and `python:3.13-slim` containers, as a non-root user like the runner's. Run as root, the two TLS tests fail, because mosquitto drops privileges and can't read pytest's temporary directory.
 
 ## Comments
 

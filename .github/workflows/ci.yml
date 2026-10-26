@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # The oldest Python pyproject.toml allows, and the image's (Dockerfile).
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      # The tests start mosquitto themselves (tests/harness.py); stop the one the package starts.
+      # They must run as a non-root user, like the runner's: as root, mosquitto drops privileges
+      # and can't read the TLS tests' certificates in pytest's temporary directory.
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mosquitto
+          sudo systemctl disable --now mosquitto
+      - run: pip install '.[dev]'
+      - run: mypy
+      - run: pytest
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t luxtronik2mqtt .
+      # The console scripts start on a read-only root filesystem.
+      - run: docker run --rm --read-only luxtronik2mqtt luxtronik2mqtt-capture --help
