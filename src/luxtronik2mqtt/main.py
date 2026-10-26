@@ -25,6 +25,9 @@ def main(env: Mapping[str, str] | None = None) -> int:
         stream=sys.stdout,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    # The library logs every read at INFO; that much only belongs in debug output.
+    if settings.log_level != "DEBUG":
+        logging.getLogger("luxtronik").setLevel(max(logging.getLevelName(settings.log_level), logging.WARNING))
     signal.signal(signal.SIGTERM, _exit)
 
     bridge = Bridge(settings, Controller(settings.host, cfi_port=settings.cfi_port, shi_port=settings.shi_port))
@@ -33,6 +36,9 @@ def main(env: Mapping[str, str] | None = None) -> int:
     except OSError as error:
         LOGGER.error("can't connect to MQTT broker %s:%s: %s", settings.mqtt_host, settings.mqtt_port, error)
         return 1
+    except KeyboardInterrupt:
+        # Stopped while connecting.
+        return 0
     try:
         bridge.run()
     except KeyboardInterrupt:

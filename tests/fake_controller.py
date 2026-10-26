@@ -13,13 +13,15 @@ class FakeController:
 
     Reads build real library data vectors from the dump's registers, so the
     library's own conversions run in tests. A test changes values with `set` and
-    takes an interface away with `cfi_reachable` or `shi_reachable`.
+    takes an interface away with `cfi_reachable` or `shi_reachable`. `attempts`
+    counts the reads tried on each interface, answered or not.
     """
 
     def __init__(self, dump: Dump) -> None:
         self.dump = copy.deepcopy(dump)
         self.cfi_reachable = True
         self.shi_reachable = dump.shi is not None
+        self.attempts = {"CFI": 0, "SHI": 0}
 
     @classmethod
     def from_fixture(cls, path: Path = fixtures.V3_92_1) -> "FakeController":
@@ -53,6 +55,7 @@ class FakeController:
         return self.dump.decode(vector)
 
     def _require(self, interface: str) -> None:
+        self.attempts[interface] += 1
         reachable = self.cfi_reachable if interface == "CFI" else self.shi_reachable
         if not reachable:
             raise Unreachable(interface, "the fake Controller", "made unreachable by the test")

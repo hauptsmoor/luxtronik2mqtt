@@ -37,22 +37,47 @@ def _mosquitto() -> str:
     )
 
 
+class Broker:
+    """A mosquitto broker on localhost that a test can restart on the same port. It forgets everything on restart."""
+
+    def __init__(self, config: Path) -> None:
+        self.port = closed_port()
+        self._config = config
+        config.write_text(f"listener {self.port} 127.0.0.1\nallow_anonymous true\npersistence false\n")
+        self._process = self._start()
+
+    def restart(self) -> None:
+        self.stop()
+        self._process = self._start()
+
+    def stop(self) -> None:
+        self._process.terminate()
+        self._process.wait(TIMEOUT)
+
+    def _start(self) -> subprocess.Popen[bytes]:
+        process = subprocess.Popen(
+            [_mosquitto(), "-c", str(self._config)], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+        )
+        _wait_until_listening(self.port, process)
+        return process
+
+
+@contextmanager
+def restartable_broker() -> Iterator[Broker]:
+    """A broker running until the block ends."""
+    with tempfile.TemporaryDirectory() as directory:
+        broker = Broker(Path(directory) / "mosquitto.conf")
+        try:
+            yield broker
+        finally:
+            broker.stop()
+
+
 @contextmanager
 def broker() -> Iterator[int]:
     """A mosquitto broker on localhost, running until the block ends. Yields its port."""
-    port = closed_port()
-    with tempfile.TemporaryDirectory() as directory:
-        config = Path(directory) / "mosquitto.conf"
-        config.write_text(f"listener {port} 127.0.0.1\nallow_anonymous true\npersistence false\n")
-        process = subprocess.Popen(
-            [_mosquitto(), "-c", str(config)], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
-        )
-        try:
-            _wait_until_listening(port, process)
-            yield port
-        finally:
-            process.terminate()
-            process.wait(TIMEOUT)
+    with restartable_broker() as running:
+        yield running.port
 
 
 def _wait_until_listening(port: int, process: subprocess.Popen[bytes]) -> None:

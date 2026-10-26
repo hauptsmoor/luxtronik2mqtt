@@ -110,11 +110,14 @@ def test_values_of_an_unreachable_interface_are_not_republished(port: int) -> No
             controller.cfi_reachable = False
             clock.advance(30)
             bridge.run_pending()
+            subscriber.sync()
             clock.advance(30)
             bridge.run_pending()
             republished = subscriber.sync()
     finally:
         subscriber.close()
 
-    assert republished
-    assert all(m.topic.startswith("luxtronik/shi/") for m in republished)
+    assert any(m.topic.startswith("luxtronik/shi/") for m in republished)
+    assert [m for m in republished if m.topic.startswith("luxtronik/cfi/")] == [
+        Message("luxtronik/cfi/status", "offline", False)
+    ]

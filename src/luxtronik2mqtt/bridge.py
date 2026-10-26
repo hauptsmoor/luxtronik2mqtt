@@ -16,6 +16,10 @@ LOGGER = logging.getLogger(__name__)
 # Payloads by topic path after the prefix. None is a field without a value.
 Payloads = dict[str, str | None]
 
+# An unreachable interface is retried after the first delay, then after twice the last one, up to the longest.
+FIRST_RETRY = 5.0
+LONGEST_RETRY = 60.0
+
 
 class Clock(Protocol):
     def monotonic(self) -> float: ...
@@ -46,9 +50,12 @@ class ControllerReader(Protocol):
 
 
 class _Job:
-    """Something the Bridge does on an interval, a poll or the republish, and when it is next due."""
+    """Something the Bridge does on an interval, a poll or the republish, and when it is next due.
 
-    def __init__(self, interval: float, run: Callable[[], None], first_after: float = 0.0) -> None:
+    A run can return a delay to be due again after that instead of the interval.
+    """
+
+    def __init__(self, interval: float, run: Callable[[], float | None], first_after: float = 0.0) -> None:
         self.interval = interval
         self.run = run
         self.due = float("-inf")
@@ -64,7 +71,9 @@ class _Job:
         due = self.due + self.interval
         # After a run that was late, or the first one, keep the interval from now instead of catching up.
         self.due = due if due > now else now + self.interval
-        self.run()
+        delay = self.run()
+        if delay is not None:
+            self.due = now + delay
 
 
 class Bridge:
@@ -91,11 +100,14 @@ class Bridge:
         self._cfi_vectors = [(path, read) for path, read in cfi_vectors if self._selection.reaches(path)]
         # Paths published in the current `run_pending`, so a republish due at the same time doesn't repeat them.
         self._just_published: set[str] = set()
-        # Interfaces whose last poll found them unreachable: their last values are stale, so not republished.
-        self._unreachable: set[str] = set()
+        # Interfaces whose last poll found them unreachable, with the delay before the next retry.
+        # Their last values are stale, so not republished.
+        self._unreachable: dict[str, float] = {}
+        # Interfaces that have answered a poll since the Bridge started.
+        self._ever_answered: set[str] = set()
         self._polls = (
-            _Job(settings.cfi_poll_interval, lambda: self._publish_changes(self._read_cfi())),
-            _Job(settings.shi_poll_interval, lambda: self._publish_changes(self._read_shi())),
+            _Job(settings.cfi_poll_interval, lambda: self._poll("cfi", self._read_cfi)),
+            _Job(settings.shi_poll_interval, lambda: self._poll("shi", self._read_shi)),
         )
         self._republish = _Job(
             settings.republish_interval, self._republish_fresh, first_after=settings.republish_interval
@@ -123,38 +135,67 @@ class Bridge:
         now = self._clock.monotonic()
         return max(min(job.due for job in (*self._polls, self._republish)) - now, 0.0)
 
-    def _publish_changes(self, payloads: Payloads | None) -> None:
-        """Publish what a poll read, if its interface answered."""
-        if payloads is not None:
-            self._just_published |= self._publisher.publish_changes(payloads)
+    def _poll(self, interface: str, read: Callable[[], Payloads]) -> float | None:
+        """Publish what a poll of this interface read, and whether it answered.
+
+        While it doesn't answer, returns the delay before the next retry. When it answers
+        again after an outage, every value from it is published, changed or not.
+        """
+        try:
+            payloads = read()
+        except Unreachable as error:
+            retry = self._unreachable.get(interface)
+            if retry is None:
+                self._warn_unreachable(interface, error)
+            else:
+                LOGGER.debug("%s", error)
+            self._unreachable[interface] = FIRST_RETRY if retry is None else min(retry * 2, LONGEST_RETRY)
+            self._just_published |= self._publisher.publish_changes({f"{interface}/status": "offline"})
+            return self._unreachable[interface]
+        self._ever_answered.add(interface)
+        recovered = self._unreachable.pop(interface, None) is not None
+        if recovered:
+            LOGGER.info("%s answers again", interface.upper())
+        payloads[f"{interface}/status"] = "online"
+        published = self._publisher.publish_changes(payloads)
+        if recovered:
+            self._publisher.republish(lambda path: path in payloads and path not in published)
+            published |= payloads.keys()
+        self._just_published |= published
+        return None
+
+    def _warn_unreachable(self, interface: str, error: Unreachable) -> None:
+        """Warn once when an interface stops answering, or doesn't answer the first poll."""
+        if interface == "shi" and interface not in self._ever_answered:
+            LOGGER.warning(
+                "%s. Running with the CFI only and retrying. The SHI needs firmware V3.90.1 or later "
+                "and has to be switched on at the Controller.",
+                error,
+            )
+        else:
+            LOGGER.warning("%s. Retrying.", error)
 
     def _republish_fresh(self) -> None:
-        """Republish every value, except those a poll just published and those of an unreachable interface."""
-        self._publisher.republish(
-            lambda path: path not in self._just_published and path.split("/", 1)[0] not in self._unreachable
-        )
+        """Republish every value, except those a poll just published and the stale ones of an unreachable interface.
 
-    def _read_cfi(self) -> Payloads | None:
+        A status is never stale, so it is always republished.
+        """
+
+        def wanted(path: str) -> bool:
+            interface, _, rest = path.partition("/")
+            return path not in self._just_published and (interface not in self._unreachable or rest == "status")
+
+        self._publisher.republish(wanted)
+
+    def _read_cfi(self) -> Payloads:
         payloads: Payloads = {}
-        try:
-            for vector_path, read in self._cfi_vectors:
-                payloads |= self._payloads(vector_path, read())
-        except Unreachable as error:
-            LOGGER.warning("%s", error)
-            self._unreachable.add("cfi")
-            return None
-        self._unreachable.discard("cfi")
+        for vector_path, read in self._cfi_vectors:
+            payloads |= self._payloads(vector_path, read())
         return payloads
 
-    def _read_shi(self) -> Payloads | None:
-        try:
-            inputs = self._controller.read_inputs()
-            holdings = self._controller.read_holdings()
-        except Unreachable as error:
-            LOGGER.warning("%s", error)
-            self._unreachable.add("shi")
-            return None
-        self._unreachable.discard("shi")
+    def _read_shi(self) -> Payloads:
+        inputs = self._controller.read_inputs()
+        holdings = self._controller.read_holdings()
         return self._payloads("shi/inputs", inputs) | self._payloads("shi/holdings", holdings)
 
     def _payloads(self, vector_path: str, vector: Any) -> Payloads:

@@ -50,7 +50,7 @@ def test_every_input_and_holding_with_a_value_is_a_retained_topic(port: int) -> 
         for _, field in vector.items()
         if field.value is not None and not field.name.startswith("unknown_")
     }
-    assert {topic for topic in retained if topic.startswith("luxtronik/shi/")} == with_value
+    assert {topic for topic in retained if topic.startswith((INPUTS, HOLDINGS))} == with_value
 
 
 def test_a_field_that_loses_its_value_has_its_topic_cleared(port: int) -> None:
