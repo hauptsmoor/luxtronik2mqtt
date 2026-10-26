@@ -7,7 +7,7 @@ from typing import Any, Protocol
 
 from luxtronik2mqtt.config import Settings
 from luxtronik2mqtt.controller import Unreachable
-from luxtronik2mqtt.formatting import payload
+from luxtronik2mqtt.formatting import meta, payload
 from luxtronik2mqtt.publishing import Publisher
 from luxtronik2mqtt.selection import Selection
 
@@ -199,10 +199,14 @@ class Bridge:
         return self._payloads("shi/inputs", inputs) | self._payloads("shi/holdings", holdings)
 
     def _payloads(self, vector_path: str, vector: Any) -> Payloads:
-        """The payload of each selected field in this vector."""
-        payloads = {}
+        """The payload of each selected field in this vector, and its meta document while it has a value."""
+        payloads: Payloads = {}
+        # Commands only ever set SHI Holdings (ADR 0001).
+        writable = vector_path == "shi/holdings"
         for _, field in vector.items():
             path = f"{vector_path}/{field.name}"
             if self._selection.selected(path):
-                payloads[path] = payload(field)
+                value = payload(field)
+                payloads[path] = value
+                payloads[f"{path}/meta"] = None if value is None else meta(field, writable and field.writeable)
         return payloads

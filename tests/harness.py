@@ -43,7 +43,11 @@ class Broker:
     def __init__(self, config: Path) -> None:
         self.port = closed_port()
         self._config = config
-        config.write_text(f"listener {self.port} 127.0.0.1\nallow_anonymous true\npersistence false\n")
+        # No limit on queued messages: a subscriber that connects late gets every retained topic,
+        # over 1,000 with meta topics once Visibilities are included, and mosquitto drops those above 1,000 by default.
+        config.write_text(
+            f"listener {self.port} 127.0.0.1\nallow_anonymous true\npersistence false\nmax_queued_messages 0\n"
+        )
         self._process = self._start()
 
     def restart(self) -> None:

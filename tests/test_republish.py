@@ -37,6 +37,7 @@ def test_every_value_is_republished_once_the_interval_passes_and_not_before(port
         subscriber.close()
 
     assert any(m.topic.startswith("luxtronik/shi/") for m in first)
+    assert any(m.topic.endswith("/meta") for m in first)
     assert sorted(republished, key=lambda m: m.topic) == sorted(first, key=lambda m: m.topic)
 
 

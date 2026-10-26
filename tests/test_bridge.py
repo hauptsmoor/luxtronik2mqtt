@@ -45,7 +45,8 @@ def test_every_known_calculation_is_a_retained_topic(port: int) -> None:
         and not field.name.startswith("Unknown_")
         and not re.fullmatch(r"ID_WEB_SoftStand_\d+", field.name)
     }
-    assert {topic for topic in retained if topic.startswith(TOPIC)} == {TOPIC + name for name in known}
+    values = {topic for topic in retained if topic.startswith(TOPIC) and not topic.endswith("/meta")}
+    assert values == {TOPIC + name for name in known}
     assert TOPIC + "ID_WEB_SoftStand" in retained
     assert not any(re.search(r"/Unknown_|/ID_WEB_SoftStand_\d", topic) for topic in retained)
 

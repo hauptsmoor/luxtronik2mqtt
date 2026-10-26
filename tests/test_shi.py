@@ -50,7 +50,8 @@ def test_every_input_and_holding_with_a_value_is_a_retained_topic(port: int) -> 
         for _, field in vector.items()
         if field.value is not None and not field.name.startswith("unknown_")
     }
-    assert {topic for topic in retained if topic.startswith((INPUTS, HOLDINGS))} == with_value
+    values = {topic for topic in retained if topic.startswith((INPUTS, HOLDINGS)) and not topic.endswith("/meta")}
+    assert values == with_value
 
 
 def test_a_field_that_loses_its_value_has_its_topic_cleared(port: int) -> None:
@@ -75,7 +76,8 @@ def test_a_field_that_loses_its_value_has_its_topic_cleared(port: int) -> None:
 
     assert Message(HOLDINGS + "hot_water_setpoint", "", False) in cleared
     # The SHI answers a block of registers at once, so the fields next to it lose their value too.
-    assert {m.topic for m in cleared} == without_value(controller) - without_value(FakeController.from_fixture())
+    values = {m.topic for m in cleared if not m.topic.endswith("/meta")}
+    assert values == without_value(controller) - without_value(FakeController.from_fixture())
     assert all(m.payload == "" for m in cleared)
 
 

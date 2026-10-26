@@ -12,8 +12,8 @@ The meta topic is published when its value topic first appears, and cleared when
 
 **Status:** ready-for-agent
 
-- [ ] `luxtronik/cfi/calculations/ID_WEB_Temperatur_TVL/meta` holds unit `°C`, type `Celsius` and `writable` false.
-- [ ] `luxtronik/shi/holdings/hot_water_mode/meta` holds `writable` true and its allowed modes in `options`.
-- [ ] Every published value topic has a matching retained meta topic, and no meta topic exists for unpublished values.
-- [ ] When a value topic is cleared (see ticket 03), its meta topic is cleared too.
-- [ ] Meta topics are not republished on every poll, only when their content changes, and with the full republish from ticket 05 once that's in.
+- [x] `luxtronik/cfi/calculations/ID_WEB_Temperatur_TVL/meta` holds unit `°C`, type `Celsius` and `writable` false.
+- [x] `luxtronik/shi/holdings/hot_water_mode/meta` holds `writable` true and its allowed modes in `options`.
+- [x] Every published value topic has a matching retained meta topic, and no meta topic exists for unpublished values.
+- [x] When a value topic is cleared (see ticket 03), its meta topic is cleared too.
+- [x] Meta topics are not republished on every poll, only when their content changes, and with the full republish from ticket 05 once that's in.
