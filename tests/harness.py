@@ -143,6 +143,20 @@ class Subscriber:
             self.messages.clear()
         return received
 
+    def publish(self, topic: str, payload: str, retain: bool = False) -> None:
+        """Publish as an outside client would, once the broker has it."""
+        self._client.publish(topic, payload, qos=1, retain=retain).wait_for_publish(TIMEOUT)
+
+    def wait_for(self, topic: str) -> list[Message]:
+        """Wait in real time until a message on this topic has arrived, then sync.
+
+        For what the Bridge does outside `run_pending`, such as running a Command.
+        """
+        with self._changed:
+            arrived = self._changed.wait_for(lambda: any(m.topic == topic for m in self.messages), TIMEOUT)
+        assert arrived, f"nothing arrived on {topic}"
+        return self.sync()
+
     def _receive(self, client: mqtt.Client, userdata: object, message: mqtt.MQTTMessage) -> None:
         with self._changed:
             self.messages.append(Message(message.topic, message.payload.decode(), bool(message.retain)))

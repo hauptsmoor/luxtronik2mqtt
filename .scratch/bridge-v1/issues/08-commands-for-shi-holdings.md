@@ -22,17 +22,19 @@ This ticket adds Holding writes to the Controller adapter and to the fake Contro
 
 **Status:** ready-for-agent
 
-- [ ] With `LUX_SHI_WRITE` unset, a Command produces an error and the fake receives no write.
-- [ ] With `LUX_SHI_WRITE=true`, `hot_water_setpoint/set` → `45` writes to the fake, and the Holding topic shows the value read back.
-- [ ] A mode Command such as `heating_mode/set` → `Setpoint` uses the same readable text the Bridge publishes.
-- [ ] A retained Command is rejected with an error and not written.
-- [ ] A Command for a name that isn't a writable Holding, or for a Holding with no value, is rejected with an error.
-- [ ] A payload the library can't convert is rejected with an error.
-- [ ] With the SHI unreachable, a Command is rejected with an error.
-- [ ] When the fake applies a different value than requested, the Holding topic shows the applied value and an error is published.
-- [ ] When the fake rejects the write, an error is published and the Holding topic keeps showing the value read back.
-- [ ] There is no code path that writes a CFI Parameter.
+- [x] With `LUX_SHI_WRITE` unset, a Command produces an error and the fake receives no write.
+- [x] With `LUX_SHI_WRITE=true`, `hot_water_setpoint/set` → `45` writes to the fake, and the Holding topic shows the value read back.
+- [x] A mode Command such as `heating_mode/set` → `Setpoint` uses the same readable text the Bridge publishes.
+- [x] A retained Command is rejected with an error and not written.
+- [x] A Command for a name that isn't a writable Holding, or for a Holding with no value, is rejected with an error.
+- [x] A payload the library can't convert is rejected with an error.
+- [x] With the SHI unreachable, a Command is rejected with an error.
+- [x] When the fake applies a different value than requested, the Holding topic shows the applied value and an error is published.
+- [x] When the fake rejects the write, an error is published and the Holding topic keeps showing the value read back.
+- [x] There is no code path that writes a CFI Parameter.
 
 ## Comments
 
 - 2026-10-26, decided with the maintainer during ticket 07: the `writable` field in a Holding's `meta` topic means "a Command could set this in principle". It stays `true` whatever `LUX_SHI_WRITE` is set to, so this ticket shouldn't tie it to that setting.
+- 2026-10-26, noted while implementing: under MQTT 3.1.1 the broker marks a message retained only when it sends it because the Bridge (re)subscribed. So the retained Command the Bridge can reject is one left at the broker from earlier. A retained `/set` published while the Bridge is connected arrives unmarked and runs; after the next reconnect it's rejected. An empty message on `/set` (how a client clears a retained Command) is ignored rather than answered with an error.
+- 2026-10-26, noted while implementing: the library hands negative values to the SHI unchanged, which pyModbusTCP refuses. The Controller adapter writes them as 16-bit two's complement for signed 16-bit types (the offsets), and rejects a value that doesn't fit the register as one the library can't convert.

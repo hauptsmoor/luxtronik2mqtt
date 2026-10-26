@@ -4,6 +4,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 
 import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion
@@ -21,8 +22,21 @@ ACK_TIMEOUT = 10.0
 STATUS = "status"
 
 
+@dataclass(frozen=True)
+class Received:
+    """A message the Bridge received, by topic path after the prefix."""
+
+    path: str
+    payload: str
+    # Set only on a message the broker kept and sent because the Bridge (re)subscribed.
+    retained: bool
+
+
 class Publisher:
-    """Publishes retained values under the prefix, each only when its payload changed."""
+    """Publishes retained values under the prefix, each only when its payload changed.
+
+    It also publishes messages that aren't retained, and hands on the messages it subscribes to.
+    """
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -40,6 +54,9 @@ class Publisher:
         self._client.will_set(f"{self._prefix}/{STATUS}", "offline", qos=1, retain=True)
         self._client.on_connect = self._on_connect
         self._client.on_disconnect = self._on_disconnect
+        self._client.on_message = self._on_message
+        # Subscribed on every connect, as the broker forgets subscriptions with the session.
+        self._subscriptions: dict[str, Callable[[Received], None]] = {}
         self._client.reconnect_delay_set(max_delay=60)
         # Set once the broker has answered the first connect, accepting it or not.
         self._connect_answered = threading.Event()
@@ -50,6 +67,13 @@ class Publisher:
         self._online = False
         # Topics cleared while disconnected. The reconnect clears them at the broker.
         self._cleared_offline: set[str] = set()
+
+    def subscribe(self, path: str, receive: Callable[[Received], None]) -> None:
+        """Subscribe to a topic path after the prefix, wildcards allowed, from the next connect on.
+
+        `receive` runs in paho's network thread, so it must hand the message on rather than publish.
+        """
+        self._subscriptions[path] = receive
 
     def connect(self) -> None:
         """Connect to the broker. Raises OSError if it can't be reached or refuses; after that, paho reconnects on its own."""
@@ -91,6 +115,12 @@ class Publisher:
         LOGGER.debug("published %d of %d values", len(changed), len(payloads))
         return set(changed)
 
+    def publish_once(self, path: str, payload: str) -> None:
+        """Publish a payload that isn't retained or remembered. While disconnected it's dropped. Waits like `publish_changes`."""
+        with self._lock:
+            sent = [self._client.publish(f"{self._prefix}/{path}", payload, qos=1)] if self._online else []
+        self._wait(sent)
+
     def republish(self, wanted: Callable[[str], bool]) -> None:
         """Publish the last payload again on every topic whose path is wanted. Waits like `publish_changes`."""
         with self._lock:
@@ -126,6 +156,8 @@ class Publisher:
             self._cleared_offline.clear()
             # No waiting for acknowledgements here: this runs in paho's network thread, which receives them.
             self._send(payloads)
+        for path in self._subscriptions:
+            client.subscribe(f"{self._prefix}/{path}", qos=1)
         if self._connect_answered.is_set():
             LOGGER.info("reconnected to MQTT broker %s:%s", *self._address())
         else:
@@ -145,6 +177,13 @@ class Publisher:
             was_online, self._online = self._online, False
         if was_online and reason_code.is_failure:
             LOGGER.warning("lost the connection to MQTT broker %s:%s (%s). Reconnecting.", *self._address(), reason_code)
+
+    def _on_message(self, client: mqtt.Client, userdata: object, message: mqtt.MQTTMessage) -> None:
+        path = message.topic.removeprefix(self._prefix + "/")
+        received = Received(path, message.payload.decode(errors="replace"), bool(message.retain))
+        for pattern, receive in self._subscriptions.items():
+            if mqtt.topic_matches_sub(pattern, path):
+                receive(received)
 
     def _address(self) -> tuple[str, int]:
         return self._settings.mqtt_host, self._settings.mqtt_port

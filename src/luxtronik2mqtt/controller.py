@@ -72,10 +72,10 @@ class Dump:
                 self._shi_registers()[vector].pop(address, None)
             return
         if vector in _CFI_VECTORS:
-            definition, registers = _encode(_CFI_VECTORS[vector], name, value, LUXTRONIK_CFI_REGISTER_BIT_SIZE)
+            definition, _, registers = _encode(_CFI_VECTORS[vector], name, value, LUXTRONIK_CFI_REGISTER_BIT_SIZE)
             self.cfi[vector][definition.index : definition.index + definition.count] = registers
             return
-        definition, registers = _encode(_SHI_VECTORS[vector], name, value, LUXTRONIK_SHI_REGISTER_BIT_SIZE)
+        definition, _, registers = _encode(_SHI_VECTORS[vector], name, value, LUXTRONIK_SHI_REGISTER_BIT_SIZE)
         shi = self._shi_registers()[vector]
         if definition.bit_offset is not None:
             # Several fields share this register; change only this field's bits.
@@ -124,14 +124,56 @@ def _definition(vector_type: Any, name: str) -> Any:
     return definition
 
 
-def _encode(vector_type: Any, name: str, value: object, register_bits: int) -> tuple[Any, list[int]]:
+def _encode(vector_type: Any, name: str, value: object, register_bits: int) -> tuple[Any, Any, list[int]]:
+    """The field set to this value, as the library converts it, and its registers. Raises ValueError if it can't."""
     definition = _definition(vector_type, name)
     field = definition.create_field()
     field.value = value
-    registers = get_data_arr(definition, field, register_bits)
+    registers = get_data_arr(definition, field, register_bits) if field.raw is not None else None
+    if registers is not None and register_bits == LUXTRONIK_SHI_REGISTER_BIT_SIZE and definition.count == 1:
+        registers = _shi_register(field, registers[0])
     if registers is None:
         raise ValueError(f"{value!r} isn't a valid value for {name}")
-    return definition, registers
+    return definition, field, registers
+
+
+def _shi_register(field: Any, raw: int) -> list[int] | None:
+    """The one 16-bit SHI register for a field's raw value, or None if it doesn't fit.
+
+    The library leaves a negative value negative; the register holds its two's complement,
+    which the library reads back as negative only for a signed 16-bit type.
+    """
+    signed = getattr(field, "data_type", None) == "signed" and getattr(field, "data_width", None) == 16
+    lowest = -(1 << 15) if signed else 0
+    if not lowest <= raw < lowest + (1 << 16):
+        return None
+    return [raw & 0xFFFF]
+
+
+def holding_to_write(name: str, value: object) -> Any:
+    """The Holding field set to this value, as the library converts it, for example `"45"` or `"Setpoint"`.
+
+    Raises KeyError if there's no Holding of that name, and ValueError if the library can't convert the value.
+    """
+    definition, field, registers = _encode(Holdings, name, value, LUXTRONIK_SHI_REGISTER_BIT_SIZE)
+    if definition.count == 1:
+        # Written as the register holds it. Setting the raw value clears the pending write, so it's set again.
+        field.raw = registers[0]
+        field.write_pending = True
+    return field
+
+
+@dataclass
+class HoldingWrite:
+    """One Holding written to the Controller: the field as requested and as read back straight after.
+
+    `accepted` is False when the Controller refused the write. The read-back is
+    what the Controller applied either way.
+    """
+
+    requested: Any
+    read_back: Any
+    accepted: bool
 
 
 class Unreachable(Exception):
@@ -185,6 +227,8 @@ class _Modbus(LuxtronikModbusTcpInterface):  # type: ignore[misc]
         if client is not None:
             self._client = client
         self.failure: str | None = None
+        # Set when the SHI answered a write with a Modbus exception, refusing it.
+        self.refused_write = False
         self.forget_registers()
 
     def forget_registers(self) -> None:
@@ -211,6 +255,14 @@ class _Modbus(LuxtronikModbusTcpInterface):  # type: ignore[misc]
             vector = "holdings" if isinstance(telegram, LuxtronikSmartHomeReadHoldingsTelegram) else "inputs"
             self.registers[vector].update(zip(range(telegram.addr, telegram.addr + telegram.count), telegram.data))
         elif self._client.last_error != MB_EXCEPT_ERR:
+            self.failure = self._client.last_error_as_txt
+        return valid
+
+    def _write_register(self, write_reg_cb: Callable[..., Any], telegram: Any) -> bool:
+        valid: bool = super()._write_register(write_reg_cb, telegram)
+        if not valid and self._client.last_error == MB_EXCEPT_ERR:
+            self.refused_write = True
+        elif not valid:
             self.failure = self._client.last_error_as_txt
         return valid
 
@@ -251,11 +303,11 @@ class _DumpedRegisters:
 
 
 class Controller:
-    """One Controller, read through the CFI and the SHI.
+    """One Controller, read through the CFI and the SHI, and written only through SHI Holdings (ADR 0001).
 
     Every read either returns library data vectors or raises Unreachable. The
-    timeout, in seconds, bounds each connect and each wait for an answer. Reads are
-    serialised through the library's per-host lock, which the CFI and the SHI share.
+    timeout, in seconds, bounds each connect and each wait for an answer. Reads and
+    writes are serialised through the library's per-host lock, which the CFI and the SHI share.
     """
 
     def __init__(
@@ -280,10 +332,32 @@ class Controller:
         return self._cfi.read_visibilities()
 
     def read_inputs(self) -> Inputs:
-        return self._read_shi(lambda shi: shi.read_inputs())
+        return self._use_shi(lambda shi: shi.read_inputs())
 
     def read_holdings(self) -> Holdings:
-        return self._read_shi(lambda shi: shi.read_holdings())
+        return self._use_shi(lambda shi: shi.read_holdings())
+
+    def write_holding(self, name: str, value: object) -> HoldingWrite:
+        """Write one Holding, given as the Bridge publishes it, then read it back.
+
+        Raises KeyError if there's no Holding of that name, ValueError if the library
+        can't convert the value or this firmware doesn't have the Holding, both before
+        anything is sent, and Unreachable if the SHI doesn't answer.
+        """
+        requested = holding_to_write(name, value)
+
+        def write_and_read_back(shi: LuxtronikSmartHomeInterface) -> Any:
+            # Collected first: if it fails, nothing is collected that a later send would carry.
+            if shi.collect_holding_for_write(requested) is None:
+                raise ValueError(f"{name} can't be written on this firmware")
+            read_back = shi.collect_holding_for_read(name)
+            shi.send()
+            return read_back
+
+        with self._modbus.lock:
+            self._modbus.refused_write = False
+            read_back = self._use_shi(write_and_read_back)
+            return HoldingWrite(requested, read_back, accepted=not self._modbus.refused_write)
 
     def firmware_version(self) -> str:
         """The firmware version as the Controller shows it, for example `V3.92.1`. Reads the CFI."""
@@ -312,13 +386,13 @@ class Controller:
                 return Dump(cfi, None)
             return Dump(cfi, self._modbus.registers)
 
-    def _read_shi(self, read: Callable[[LuxtronikSmartHomeInterface], _Vector]) -> _Vector:
+    def _use_shi(self, use: Callable[[LuxtronikSmartHomeInterface], _Vector]) -> _Vector:
         with self._modbus.lock:
             self._modbus.failure = None
             if self._shi is None:
                 version = resolve_version(self._modbus)
                 self._modbus.raise_if_failed()
                 self._shi = LuxtronikSmartHomeInterface(self._modbus, version)
-            vector = read(self._shi)
+            result = use(self._shi)
             self._modbus.raise_if_failed()
-            return vector
+            return result

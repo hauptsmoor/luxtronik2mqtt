@@ -97,3 +97,43 @@ def test_reads_what_the_controller_adapter_reads_from_the_same_controller() -> N
 
         for read in READS:
             assert values(getattr(fake, read)()) == values(getattr(controller, read)()), read
+
+
+def test_a_holding_write_is_accepted_and_read_back_by_default() -> None:
+    fake = FakeController.from_fixture()
+
+    written = fake.write_holding("hot_water_setpoint", "45")
+
+    assert fake.writes == [("hot_water_setpoint", "45")]
+    assert (written.accepted, written.requested.value, written.read_back.value) == (True, 45.0, 45.0)
+    assert fake.read_holdings().get("hot_water_setpoint").value == 45.0
+
+
+def test_a_holding_write_can_be_refused() -> None:
+    fake = FakeController.from_fixture()
+    fake.refuse_writes = True
+
+    written = fake.write_holding("hot_water_setpoint", "45")
+
+    assert (written.accepted, written.read_back.value) == (False, 40.0)
+    assert fake.read_holdings().get("hot_water_setpoint").value == 40.0
+
+
+def test_a_holding_write_can_apply_a_different_value() -> None:
+    fake = FakeController.from_fixture()
+    fake.applies_instead = 42.0
+
+    written = fake.write_holding("hot_water_setpoint", "45")
+
+    assert (written.accepted, written.requested.value, written.read_back.value) == (True, 45.0, 42.0)
+
+
+def test_a_holding_write_the_library_cant_convert_or_to_an_unreachable_shi_isnt_received() -> None:
+    fake = FakeController.from_fixture()
+
+    with pytest.raises(ValueError):
+        fake.write_holding("hot_water_setpoint", "warm")
+    fake.shi_reachable = False
+    assert_unreachable("SHI", lambda: fake.write_holding("hot_water_setpoint", "45"))
+
+    assert fake.writes == []

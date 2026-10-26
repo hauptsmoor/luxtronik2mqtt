@@ -1,10 +1,12 @@
 """The Bridge: polls the Controller on a schedule and publishes its values."""
 
 import logging
+import threading
 import time
 from collections.abc import Callable
 from typing import Any, Protocol
 
+from luxtronik2mqtt.commands import Commands
 from luxtronik2mqtt.config import Settings
 from luxtronik2mqtt.controller import Unreachable
 from luxtronik2mqtt.formatting import meta, payload
@@ -35,7 +37,7 @@ class SystemClock:
         time.sleep(seconds)
 
 
-class ControllerReader(Protocol):
+class ControllerAdapter(Protocol):
     """What the Bridge needs from the Controller adapter, or from a fake one in tests."""
 
     def read_calculations(self) -> Any: ...
@@ -47,6 +49,8 @@ class ControllerReader(Protocol):
     def read_inputs(self) -> Any: ...
 
     def read_holdings(self) -> Any: ...
+
+    def write_holding(self, name: str, value: object) -> Any: ...
 
 
 class _Job:
@@ -84,11 +88,18 @@ class Bridge:
     Time comes from the clock, so tests drive the schedule with `run_pending`.
     """
 
-    def __init__(self, settings: Settings, controller: ControllerReader, clock: Clock | None = None) -> None:
+    def __init__(self, settings: Settings, controller: ControllerAdapter, clock: Clock | None = None) -> None:
         self._settings = settings
         self._controller = controller
         self._clock = clock or SystemClock()
         self._publisher = Publisher(settings)
+        # Held by an SHI poll and by a Command, so neither publishes Holdings in the middle of the other.
+        self._shi_lock = threading.Lock()
+        # The Holdings the last SHI poll read, for Commands.
+        self._holdings: Any = None
+        self._commands = Commands(
+            settings, controller, self._publisher, self._shi_lock, self._answering_holdings, self._publish_holding
+        )
         self._selection = Selection(settings.include, settings.exclude)
         # A CFI vector is read only when the defaults or an include can select some of its values,
         # so Parameters and Visibilities are left alone unless included.
@@ -107,16 +118,18 @@ class Bridge:
         self._ever_answered: set[str] = set()
         self._polls = (
             _Job(settings.cfi_poll_interval, lambda: self._poll("cfi", self._read_cfi)),
-            _Job(settings.shi_poll_interval, lambda: self._poll("shi", self._read_shi)),
+            _Job(settings.shi_poll_interval, self._poll_shi),
         )
         self._republish = _Job(
             settings.republish_interval, self._republish_fresh, first_after=settings.republish_interval
         )
 
     def start(self) -> None:
+        self._commands.start()
         self._publisher.connect()
 
     def stop(self) -> None:
+        self._commands.stop()
         self._publisher.disconnect()
 
     def run(self) -> None:
@@ -164,6 +177,18 @@ class Bridge:
         self._just_published |= published
         return None
 
+    def _poll_shi(self) -> float | None:
+        with self._shi_lock:
+            return self._poll("shi", self._read_shi)
+
+    def _answering_holdings(self) -> Any:
+        """The Holdings the last SHI poll read, or None if it didn't answer."""
+        return None if "shi" in self._unreachable else self._holdings
+
+    def _publish_holding(self, field: Any) -> None:
+        """Publish a Holding read back after a Command, outside the poll, if it is selected."""
+        self._publisher.publish_changes(self._payloads("shi/holdings", {field.name: field}))
+
     def _warn_unreachable(self, interface: str, error: Unreachable) -> None:
         """Warn once when an interface stops answering, or doesn't answer the first poll."""
         if interface == "shi" and interface not in self._ever_answered:
@@ -196,6 +221,7 @@ class Bridge:
     def _read_shi(self) -> Payloads:
         inputs = self._controller.read_inputs()
         holdings = self._controller.read_holdings()
+        self._holdings = holdings
         return self._payloads("shi/inputs", inputs) | self._payloads("shi/holdings", holdings)
 
     def _payloads(self, vector_path: str, vector: Any) -> Payloads:

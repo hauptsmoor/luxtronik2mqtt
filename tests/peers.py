@@ -1,5 +1,6 @@
 """Network peers for testing the Controller adapter without a Controller."""
 
+import copy
 import socket
 import socketserver
 import struct
@@ -40,7 +41,7 @@ def silent_port() -> Iterator[int]:
 class SimulatedController:
     cfi_port: int
     shi_port: int
-    # Every write anyone attempted; the simulated Controller refuses them all.
+    # Every write anyone attempted. Unless it accepts writes, the simulated Controller refuses them all.
     writes: list[str] = field(default_factory=list)
 
     def controller(self) -> Controller:
@@ -48,17 +49,18 @@ class SimulatedController:
 
 
 @contextmanager
-def simulated_controller(dump: Dump) -> Iterator[SimulatedController]:
+def simulated_controller(dump: Dump, accept_writes: bool = False) -> Iterator[SimulatedController]:
     """A Controller on localhost that serves the dump's registers.
 
-    Without SHI registers in the dump, the SHI port is closed.
+    Without SHI registers in the dump, the SHI port is closed. With `accept_writes`,
+    the SHI stores what is written to Holdings it has; otherwise it refuses every write.
     """
     writes: list[str] = []
     with _cfi_server(dump.cfi, writes) as cfi_port:
         if dump.shi is None:
             yield SimulatedController(cfi_port, closed_port(), writes)
         else:
-            with _shi_server(dump.shi, writes) as shi_port:
+            with _shi_server(dump.shi, writes, accept_writes) as shi_port:
                 yield SimulatedController(cfi_port, shi_port, writes)
 
 
@@ -104,12 +106,13 @@ def _cfi_answer(command: int, registers: dict[str, list[int]]) -> bytes:
 
 
 class _Registers(DataBank):  # type: ignore[misc]
-    """SHI registers; reading one the dump doesn't have gets a Modbus exception."""
+    """SHI registers; reading or writing one the dump doesn't have gets a Modbus exception."""
 
-    def __init__(self, registers: dict[str, dict[int, int]], writes: list[str]) -> None:
+    def __init__(self, registers: dict[str, dict[int, int]], writes: list[str], accept_writes: bool) -> None:
         super().__init__()
         self._registers = registers
         self._writes = writes
+        self._accept_writes = accept_writes
 
     def get_input_registers(self, address: int, number: int = 1, srv_info: Any = None) -> list[int] | None:
         return self._get("inputs", address, number)
@@ -117,8 +120,13 @@ class _Registers(DataBank):  # type: ignore[misc]
     def get_holding_registers(self, address: int, number: int = 1, srv_info: Any = None) -> list[int] | None:
         return self._get("holdings", address, number)
 
-    def set_holding_registers(self, address: int, word_list: list[int], srv_info: Any = None) -> None:
+    def set_holding_registers(self, address: int, word_list: list[int], srv_info: Any = None) -> bool | None:
         self._writes.append(f"SHI holdings {address}: {word_list}")
+        addresses = range(address, address + len(word_list))
+        if not self._accept_writes or any(a not in self._registers["holdings"] for a in addresses):
+            return None
+        self._registers["holdings"].update(zip(addresses, word_list))
+        return True
 
     def set_coils(self, address: int, bit_list: list[bool], srv_info: Any = None) -> None:
         self._writes.append(f"SHI coils {address}: {bit_list}")
@@ -131,8 +139,9 @@ class _Registers(DataBank):  # type: ignore[misc]
 
 
 @contextmanager
-def _shi_server(registers: dict[str, dict[int, int]], writes: list[str]) -> Iterator[int]:
-    server = ModbusServer("127.0.0.1", 0, no_block=True, data_bank=_Registers(registers, writes))
+def _shi_server(registers: dict[str, dict[int, int]], writes: list[str], accept_writes: bool) -> Iterator[int]:
+    data_bank = _Registers(copy.deepcopy(registers), writes, accept_writes)
+    server = ModbusServer("127.0.0.1", 0, no_block=True, data_bank=data_bank)
     server.start()
     try:
         yield server._service.server_address[1]

@@ -95,3 +95,59 @@ def test_shi_that_never_answers_is_unreachable_within_the_timeout() -> None:
 
     assert raised.value.interface == "SHI"
     assert time.monotonic() - started < 2 * TIMEOUT
+
+
+def test_writes_a_holding_and_returns_the_value_read_back() -> None:
+    with simulated_controller(fixtures.load(), accept_writes=True) as simulated:
+        written = simulated.controller().write_holding("hot_water_setpoint", "45")
+
+    assert simulated.writes == ["SHI holdings 10006: [450]"]
+    assert written.accepted
+    assert written.requested.value == 45.0
+    assert written.read_back.value == 45.0
+
+
+def test_a_refused_write_still_returns_the_value_read_back() -> None:
+    with simulated_controller(fixtures.load(), accept_writes=False) as simulated:
+        written = simulated.controller().write_holding("hot_water_mode", "Setpoint")
+
+    assert simulated.writes == ["SHI holdings 10005: [1]"]
+    assert not written.accepted
+    assert written.requested.value == "Setpoint"
+    assert written.read_back.value == "Off"
+
+
+def test_a_value_the_library_cant_convert_is_refused_before_anything_is_sent() -> None:
+    with simulated_controller(fixtures.load(), accept_writes=True) as simulated:
+        with pytest.raises(ValueError):
+            simulated.controller().write_holding("hot_water_setpoint", "warm")
+        with pytest.raises(ValueError):
+            simulated.controller().write_holding("heating_mode", "Sometimes")
+
+    assert simulated.writes == []
+
+
+def test_a_write_to_an_unreachable_shi_raises_unreachable() -> None:
+    controller = Controller("127.0.0.1", cfi_port=closed_port(), shi_port=closed_port())
+
+    with pytest.raises(Unreachable) as raised:
+        controller.write_holding("hot_water_setpoint", "45")
+
+    assert raised.value.interface == "SHI"
+
+
+def test_a_negative_value_is_written_as_the_register_holds_it() -> None:
+    with simulated_controller(fixtures.load(), accept_writes=True) as simulated:
+        written = simulated.controller().write_holding("heating_offset", "-2")
+
+    assert simulated.writes == ["SHI holdings 10002: [65516]"]
+    assert (written.accepted, written.requested.value, written.read_back.value) == (True, -2.0, -2.0)
+
+
+@pytest.mark.parametrize(("name", "value"), [("hot_water_setpoint", "-5"), ("hot_water_setpoint", "7000"), ("heating_offset", "4000")])
+def test_a_value_that_doesnt_fit_the_register_is_refused_before_anything_is_sent(name: str, value: str) -> None:
+    with simulated_controller(fixtures.load(), accept_writes=True) as simulated:
+        with pytest.raises(ValueError):
+            simulated.controller().write_holding(name, value)
+
+    assert simulated.writes == []

@@ -33,6 +33,7 @@ class Settings:
     log_level: str = "INFO"
     include: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
+    shi_write: bool = False
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> "Settings":
@@ -53,6 +54,7 @@ class Settings:
             log_level=_log_level(env, "LUX_LOG_LEVEL"),
             include=_patterns(env, "LUX_INCLUDE"),
             exclude=_patterns(env, "LUX_EXCLUDE"),
+            shi_write=_flag(env, "LUX_SHI_WRITE"),
         )
 
 
@@ -98,6 +100,13 @@ def _log_level(env: Mapping[str, str], variable: str) -> str:
     if level not in logging.getLevelNamesMapping():
         raise ConfigError(variable, f"must be a log level such as DEBUG, INFO or WARNING, not {env[variable]!r}")
     return level
+
+
+def _flag(env: Mapping[str, str], variable: str) -> bool:
+    flag = env.get(variable, "false").lower()
+    if flag not in ("true", "false"):
+        raise ConfigError(variable, f"must be true or false, not {env[variable]!r}")
+    return flag == "true"
 
 
 def _patterns(env: Mapping[str, str], variable: str) -> tuple[str, ...]:
