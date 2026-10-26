@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from luxtronik2mqtt.controller import DEFAULT_CFI_PORT, DEFAULT_SHI_PORT
 
-MIN_POLL_INTERVAL = 2.0
+MIN_INTERVAL = 2.0
 
 
 class ConfigError(Exception):
@@ -25,6 +25,7 @@ class Settings:
     cfi_poll_interval: float = 30.0
     shi_port: int = DEFAULT_SHI_PORT
     shi_poll_interval: float = 30.0
+    republish_interval: float = 300.0
     mqtt_port: int = 1883
     mqtt_username: str | None = None
     mqtt_password: str | None = None
@@ -41,9 +42,10 @@ class Settings:
             host=_required(env, "LUX_HOST"),
             mqtt_host=_required(env, "LUX_MQTT_HOST"),
             cfi_port=_port(env, "LUX_CFI_PORT", DEFAULT_CFI_PORT),
-            cfi_poll_interval=_poll_interval(env, "LUX_CFI_POLL_INTERVAL"),
+            cfi_poll_interval=_seconds(env, "LUX_CFI_POLL_INTERVAL", 30.0),
             shi_port=_port(env, "LUX_SHI_PORT", DEFAULT_SHI_PORT),
-            shi_poll_interval=_poll_interval(env, "LUX_SHI_POLL_INTERVAL"),
+            shi_poll_interval=_seconds(env, "LUX_SHI_POLL_INTERVAL", 30.0),
+            republish_interval=_seconds(env, "LUX_REPUBLISH_INTERVAL", 300.0),
             mqtt_port=_port(env, "LUX_MQTT_PORT", 1883),
             mqtt_username=env.get("LUX_MQTT_USERNAME"),
             mqtt_password=env.get("LUX_MQTT_PASSWORD"),
@@ -72,15 +74,15 @@ def _port(env: Mapping[str, str], variable: str, default: int) -> int:
     return port
 
 
-def _poll_interval(env: Mapping[str, str], variable: str) -> float:
+def _seconds(env: Mapping[str, str], variable: str, default: float) -> float:
     if variable not in env:
-        return 30.0
+        return default
     try:
         seconds = float(env[variable])
     except ValueError:
         raise ConfigError(variable, f"must be a number of seconds, not {env[variable]!r}") from None
-    if not seconds >= MIN_POLL_INTERVAL:
-        raise ConfigError(variable, f"must be at least {MIN_POLL_INTERVAL:g} seconds, not {env[variable]}")
+    if not seconds >= MIN_INTERVAL:
+        raise ConfigError(variable, f"must be at least {MIN_INTERVAL:g} seconds, not {env[variable]}")
     return seconds
 
 

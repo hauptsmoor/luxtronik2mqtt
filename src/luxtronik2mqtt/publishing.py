@@ -2,6 +2,7 @@
 
 import logging
 import time
+from collections.abc import Callable, Mapping
 
 import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion
@@ -40,7 +41,7 @@ class Publisher:
         self._client.disconnect()
         self._client.loop_stop()
 
-    def publish_changes(self, payloads: dict[str, str | None]) -> None:
+    def publish_changes(self, payloads: dict[str, str | None]) -> set[str]:
         """Publish each payload, by topic path after the prefix, whose topic last had a different one.
 
         None is a value without a payload: its topic, if it has one, is cleared with
@@ -48,19 +49,34 @@ class Publisher:
         too, so it counts as None.
 
         Waits until the broker has acknowledged them, so a round is complete when it returns.
+        Returns the paths it published.
         """
-        sent = []
+        changed = {}
         for path, payload in payloads.items():
             payload = payload or None
             if self._published.get(path) == payload:
                 continue
-            # A message published while disconnected stays queued and goes out on reconnect.
-            sent.append(self._client.publish(f"{self._prefix}/{path}", payload or "", qos=1, retain=True))
+            changed[path] = payload
             if payload is None:
                 del self._published[path]
             else:
                 self._published[path] = payload
-        LOGGER.debug("published %d of %d values", len(sent), len(payloads))
+        self._publish(changed)
+        LOGGER.debug("published %d of %d values", len(changed), len(payloads))
+        return set(changed)
+
+    def republish(self, wanted: Callable[[str], bool]) -> None:
+        """Publish the last payload again on every topic whose path is wanted. Waits like `publish_changes`."""
+        payloads = {path: payload for path, payload in self._published.items() if wanted(path)}
+        self._publish(payloads)
+        LOGGER.debug("republished %d values", len(payloads))
+
+    def _publish(self, payloads: Mapping[str, str | None]) -> None:
+        # A message published while disconnected stays queued and goes out on reconnect.
+        sent = [
+            self._client.publish(f"{self._prefix}/{path}", payload or "", qos=1, retain=True)
+            for path, payload in payloads.items()
+        ]
         deadline = time.monotonic() + ACK_TIMEOUT
         for info in sent:
             try:

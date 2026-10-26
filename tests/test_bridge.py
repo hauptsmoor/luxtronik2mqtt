@@ -127,6 +127,8 @@ def test_the_prefix_sets_the_topic_root(port: int) -> None:
         ({"LUX_HOST": "controller", "LUX_MQTT_HOST": "broker", "LUX_CFI_POLL_INTERVAL": "often"}, "LUX_CFI_POLL_INTERVAL"),
         ({"LUX_HOST": "controller", "LUX_MQTT_HOST": "broker", "LUX_SHI_POLL_INTERVAL": "1"}, "LUX_SHI_POLL_INTERVAL"),
         ({"LUX_HOST": "controller", "LUX_MQTT_HOST": "broker", "LUX_SHI_PORT": "modbus"}, "LUX_SHI_PORT"),
+        ({"LUX_HOST": "controller", "LUX_MQTT_HOST": "broker", "LUX_REPUBLISH_INTERVAL": "hourly"}, "LUX_REPUBLISH_INTERVAL"),
+        ({"LUX_HOST": "controller", "LUX_MQTT_HOST": "broker", "LUX_REPUBLISH_INTERVAL": "0"}, "LUX_REPUBLISH_INTERVAL"),
         ({"LUX_HOST": "controller", "LUX_MQTT_HOST": "broker", "LUX_MQTT_PORT": "0"}, "LUX_MQTT_PORT"),
     ],
 )
