@@ -3,11 +3,13 @@
 from fnmatch import fnmatchcase
 
 # Published unless something below leaves them out.
-DEFAULTS = ("cfi/calculations/*",)
+DEFAULTS = ("cfi/calculations/*", "shi/inputs/*", "shi/holdings/*")
 
-# Fields without meaning, and known noise: the firmware version one character per field.
+# Fields without meaning (the library names them `Unknown_*` on the CFI and
+# `unknown_*` on the SHI), and known noise: the firmware version one character per field.
 NOISE = (
     "*/Unknown_*",
+    "shi/*/unknown_*",
     "cfi/calculations/ID_WEB_SoftStand_*",
 )
 

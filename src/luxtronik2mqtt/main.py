@@ -27,7 +27,7 @@ def main(env: Mapping[str, str] | None = None) -> int:
     )
     signal.signal(signal.SIGTERM, _exit)
 
-    bridge = Bridge(settings, Controller(settings.host, cfi_port=settings.cfi_port))
+    bridge = Bridge(settings, Controller(settings.host, cfi_port=settings.cfi_port, shi_port=settings.shi_port))
     try:
         bridge.start()
     except OSError as error:

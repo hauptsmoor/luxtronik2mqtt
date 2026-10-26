@@ -8,8 +8,20 @@ The SHI is polled on its own interval, `LUX_SHI_POLL_INTERVAL` (default 30 s, mi
 
 **Status:** ready-for-agent
 
-- [ ] With the fixture loaded, a subscriber receives retained `luxtronik/shi/inputs/<name>` and `luxtronik/shi/holdings/<name>` topics for every field that has a value.
-- [ ] No topic exists for fields that have no value, for example `mc1_heat_mode`.
-- [ ] When the fake changes a published SHI field to no value, its retained topic is cleared.
-- [ ] CFI and SHI poll on their own intervals: with different intervals set, each interface is read on its own schedule on the injected clock.
-- [ ] `LUX_SHI_POLL_INTERVAL` below 2 stops the Bridge at startup with a message naming the variable.
+- [x] With the fixture loaded, a subscriber receives retained `luxtronik/shi/inputs/<name>` and `luxtronik/shi/holdings/<name>` topics for every field that has a value.
+- [x] No topic exists for fields that have no value, for example `mc1_heat_mode`.
+- [x] When the fake changes a published SHI field to no value, its retained topic is cleared.
+- [x] CFI and SHI poll on their own intervals: with different intervals set, each interface is read on its own schedule on the injected clock.
+- [x] `LUX_SHI_POLL_INTERVAL` below 2 stops the Bridge at startup with a message naming the variable.
+
+## Comments
+
+**2026-10-26, implementation:**
+- The Bridge now runs one poll per interface (`_Poll` in `bridge.py`), each with its own interval and due time on the injected clock. `LUX_SHI_PORT` (default 502, from the spec's ENV contract) is wired through as well.
+- SHI fields the library names `unknown_input_*` and `unknown_holding_*` (lowercase on the SHI) are left out by default, like the CFI's `Unknown_*` (spec, Selection defaults). Ticket 04's include patterns need to be able to switch both on.
+- A field that loses its value has its retained topic cleared with an empty retained payload. This applies to CFI Calculations as well as to SHI fields, so both behave the same. An empty payload from the library counts as no value, since publishing it would clear the topic at the broker anyway.
+- The fake Controller sets a SHI field to no value with `set(vector, name, None)`, which removes its registers from the dump. The SHI answers reads in blocks of registers, so the fields that share that block lose their value too, as they would on a real Controller.
+- `heatpump_status` and `heatpump_vd1_status` etc. share one register, so setting `heatpump_status` to `VD1 running` also turns `heatpump_vd1_status` to `1`.
+- If the Inputs read and the Holdings read fail in one SHI round, nothing from that round is published. An unreachable SHI is still logged on every poll (ticket 06).
+- Not run against the real Controller in this ticket.
+

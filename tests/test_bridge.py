@@ -45,7 +45,7 @@ def test_every_known_calculation_is_a_retained_topic(port: int) -> None:
         and not field.name.startswith("Unknown_")
         and not re.fullmatch(r"ID_WEB_SoftStand_\d+", field.name)
     }
-    assert set(retained) == {TOPIC + name for name in known}
+    assert {topic for topic in retained if topic.startswith(TOPIC)} == {TOPIC + name for name in known}
     assert TOPIC + "ID_WEB_SoftStand" in retained
     assert not any(re.search(r"/Unknown_|/ID_WEB_SoftStand_\d", topic) for topic in retained)
 
@@ -115,7 +115,7 @@ def test_the_prefix_sets_the_topic_root(port: int) -> None:
     retained = retained_after_first_poll(FakeController.from_fixture(), env(port, LUX_MQTT_PREFIX="home/heatpump"), port)
 
     assert retained["home/heatpump/cfi/calculations/ID_WEB_Temperatur_TVL"] == "29.2"
-    assert all(topic.startswith("home/heatpump/cfi/calculations/") for topic in retained)
+    assert all(topic.startswith("home/heatpump/") for topic in retained)
 
 
 @pytest.mark.parametrize(
@@ -125,6 +125,8 @@ def test_the_prefix_sets_the_topic_root(port: int) -> None:
         ({"LUX_HOST": "controller"}, "LUX_MQTT_HOST"),
         ({"LUX_HOST": "controller", "LUX_MQTT_HOST": "broker", "LUX_CFI_POLL_INTERVAL": "1.5"}, "LUX_CFI_POLL_INTERVAL"),
         ({"LUX_HOST": "controller", "LUX_MQTT_HOST": "broker", "LUX_CFI_POLL_INTERVAL": "often"}, "LUX_CFI_POLL_INTERVAL"),
+        ({"LUX_HOST": "controller", "LUX_MQTT_HOST": "broker", "LUX_SHI_POLL_INTERVAL": "1"}, "LUX_SHI_POLL_INTERVAL"),
+        ({"LUX_HOST": "controller", "LUX_MQTT_HOST": "broker", "LUX_SHI_PORT": "modbus"}, "LUX_SHI_PORT"),
         ({"LUX_HOST": "controller", "LUX_MQTT_HOST": "broker", "LUX_MQTT_PORT": "0"}, "LUX_MQTT_PORT"),
     ],
 )

@@ -4,7 +4,7 @@ import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from luxtronik2mqtt.controller import DEFAULT_CFI_PORT
+from luxtronik2mqtt.controller import DEFAULT_CFI_PORT, DEFAULT_SHI_PORT
 
 MIN_POLL_INTERVAL = 2.0
 
@@ -23,6 +23,8 @@ class Settings:
     mqtt_host: str
     cfi_port: int = DEFAULT_CFI_PORT
     cfi_poll_interval: float = 30.0
+    shi_port: int = DEFAULT_SHI_PORT
+    shi_poll_interval: float = 30.0
     mqtt_port: int = 1883
     mqtt_username: str | None = None
     mqtt_password: str | None = None
@@ -38,6 +40,8 @@ class Settings:
             mqtt_host=_required(env, "LUX_MQTT_HOST"),
             cfi_port=_port(env, "LUX_CFI_PORT", DEFAULT_CFI_PORT),
             cfi_poll_interval=_poll_interval(env, "LUX_CFI_POLL_INTERVAL"),
+            shi_port=_port(env, "LUX_SHI_PORT", DEFAULT_SHI_PORT),
+            shi_poll_interval=_poll_interval(env, "LUX_SHI_POLL_INTERVAL"),
             mqtt_port=_port(env, "LUX_MQTT_PORT", 1883),
             mqtt_username=env.get("LUX_MQTT_USERNAME"),
             mqtt_password=env.get("LUX_MQTT_PASSWORD"),

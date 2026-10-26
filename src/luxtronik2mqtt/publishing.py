@@ -40,18 +40,26 @@ class Publisher:
         self._client.disconnect()
         self._client.loop_stop()
 
-    def publish_changes(self, payloads: dict[str, str]) -> None:
+    def publish_changes(self, payloads: dict[str, str | None]) -> None:
         """Publish each payload, by topic path after the prefix, whose topic last had a different one.
+
+        None is a value without a payload: its topic, if it has one, is cleared with
+        an empty retained payload. An empty payload clears the topic at the broker
+        too, so it counts as None.
 
         Waits until the broker has acknowledged them, so a round is complete when it returns.
         """
         sent = []
         for path, payload in payloads.items():
+            payload = payload or None
             if self._published.get(path) == payload:
                 continue
             # A message published while disconnected stays queued and goes out on reconnect.
-            sent.append(self._client.publish(f"{self._prefix}/{path}", payload, qos=1, retain=True))
-            self._published[path] = payload
+            sent.append(self._client.publish(f"{self._prefix}/{path}", payload or "", qos=1, retain=True))
+            if payload is None:
+                del self._published[path]
+            else:
+                self._published[path] = payload
         LOGGER.debug("published %d of %d values", len(sent), len(payloads))
         deadline = time.monotonic() + ACK_TIMEOUT
         for info in sent:

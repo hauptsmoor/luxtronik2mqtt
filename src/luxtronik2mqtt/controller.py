@@ -61,7 +61,16 @@ class Dump:
         return version
 
     def set(self, vector: str, name: str, value: object) -> None:
-        """Set one field to a value, written into the registers the way the library encodes it."""
+        """Set one field to a value, written into the registers the way the library encodes it.
+
+        None on a SHI field removes its registers, so the SHI answers a read of them
+        with a Modbus exception, as for a field this installation doesn't have.
+        """
+        if value is None and vector in _SHI_VECTORS:
+            definition = _definition(_SHI_VECTORS[vector], name)
+            for address in range(definition.addr, definition.addr + definition.count):
+                self._shi_registers()[vector].pop(address, None)
+            return
         if vector in _CFI_VECTORS:
             definition, registers = _encode(_CFI_VECTORS[vector], name, value, LUXTRONIK_CFI_REGISTER_BIT_SIZE)
             self.cfi[vector][definition.index : definition.index + definition.count] = registers
@@ -108,10 +117,15 @@ _SHI_VECTORS = {"inputs": Inputs, "holdings": Holdings}
 _cfi_parser = LuxtronikSocketInterface("dump")
 
 
-def _encode(vector_type: Any, name: str, value: object, register_bits: int) -> tuple[Any, list[int]]:
+def _definition(vector_type: Any, name: str) -> Any:
     definition = vector_type.definitions.get(name)
     if definition is None:
         raise KeyError(f"{vector_type.__name__} have no field {name}")
+    return definition
+
+
+def _encode(vector_type: Any, name: str, value: object, register_bits: int) -> tuple[Any, list[int]]:
+    definition = _definition(vector_type, name)
     field = definition.create_field()
     field.value = value
     registers = get_data_arr(definition, field, register_bits)

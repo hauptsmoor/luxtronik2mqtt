@@ -2,6 +2,7 @@
 
 import logging
 import time
+from collections.abc import Callable
 from typing import Any, Protocol
 
 from luxtronik2mqtt.config import Settings
@@ -11,6 +12,9 @@ from luxtronik2mqtt.publishing import Publisher
 from luxtronik2mqtt.selection import selected
 
 LOGGER = logging.getLogger(__name__)
+
+# Payloads by topic path after the prefix. None is a field without a value.
+Payloads = dict[str, str | None]
 
 
 class Clock(Protocol):
@@ -32,9 +36,32 @@ class ControllerReader(Protocol):
 
     def read_calculations(self) -> Any: ...
 
+    def read_inputs(self) -> Any: ...
+
+    def read_holdings(self) -> Any: ...
+
+
+class _Poll:
+    """One interface's poll and when it is next due."""
+
+    def __init__(self, interval: float, read: Callable[[], Payloads | None]) -> None:
+        self.interval = interval
+        self.read = read
+        # Due straight away when the Bridge starts.
+        self.due = float("-inf")
+
+    def run_if_due(self, now: float) -> Payloads | None:
+        """The payloads if the poll was due and the interface answered, else None."""
+        if now < self.due:
+            return None
+        due = self.due + self.interval
+        # After a poll that ran late, or the first one, keep the interval from now instead of catching up.
+        self.due = due if due > now else now + self.interval
+        return self.read()
+
 
 class Bridge:
-    """Polls the CFI every poll interval and publishes the selected values that changed.
+    """Polls the CFI and the SHI, each on its own interval, and publishes the selected values that changed.
 
     Time comes from the clock, so tests drive the schedule with `run_pending`.
     """
@@ -44,7 +71,10 @@ class Bridge:
         self._controller = controller
         self._clock = clock or SystemClock()
         self._publisher = Publisher(settings)
-        self._next_cfi_poll: float | None = None
+        self._polls = (
+            _Poll(settings.cfi_poll_interval, self._read_cfi),
+            _Poll(settings.shi_poll_interval, self._read_shi),
+        )
 
     def start(self) -> None:
         self._publisher.connect()
@@ -60,23 +90,36 @@ class Bridge:
     def run_pending(self) -> float:
         """Run every poll that is due now. Returns the seconds until the next one is due."""
         now = self._clock.monotonic()
-        if self._next_cfi_poll is None or now >= self._next_cfi_poll:
-            self._poll_cfi()
-            due = (now if self._next_cfi_poll is None else self._next_cfi_poll) + self._settings.cfi_poll_interval
-            # After a poll that ran late, keep the interval from now instead of catching up.
-            self._next_cfi_poll = due if due > now else now + self._settings.cfi_poll_interval
-        return max(self._next_cfi_poll - self._clock.monotonic(), 0.0)
+        for poll in self._polls:
+            payloads = poll.run_if_due(now)
+            if payloads is not None:
+                self._publisher.publish_changes(payloads)
+        now = self._clock.monotonic()
+        return max(min(poll.due for poll in self._polls) - now, 0.0)
 
-    def _poll_cfi(self) -> None:
+    def _read_cfi(self) -> Payloads | None:
         try:
             calculations = self._controller.read_calculations()
         except Unreachable as error:
             LOGGER.warning("%s", error)
-            return
-        payloads = {}
-        for _, field in calculations.items():
-            path = f"cfi/calculations/{field.name}"
-            text = payload(field)
-            if text is not None and selected(path):
-                payloads[path] = text
-        self._publisher.publish_changes(payloads)
+            return None
+        return _payloads("cfi/calculations", calculations)
+
+    def _read_shi(self) -> Payloads | None:
+        try:
+            inputs = self._controller.read_inputs()
+            holdings = self._controller.read_holdings()
+        except Unreachable as error:
+            LOGGER.warning("%s", error)
+            return None
+        return _payloads("shi/inputs", inputs) | _payloads("shi/holdings", holdings)
+
+
+def _payloads(vector_path: str, vector: Any) -> Payloads:
+    """The payload of each selected field in this vector."""
+    payloads = {}
+    for _, field in vector.items():
+        path = f"{vector_path}/{field.name}"
+        if selected(path):
+            payloads[path] = payload(field)
+    return payloads
