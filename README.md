@@ -33,7 +33,7 @@ The image runs on amd64, arm64 and armv7 (for example a Raspberry Pi). It runs a
 docker run -d --name luxtronik2mqtt --restart unless-stopped --read-only \
   -e LUX_HOST=192.168.1.50 \
   -e LUX_MQTT_HOST=192.168.1.10 \
-  ghcr.io/OWNER/luxtronik2mqtt:latest
+  ghcr.io/hauptsmoor/luxtronik2mqtt:latest
 ```
 
 With Compose:
@@ -41,7 +41,7 @@ With Compose:
 ```yaml
 services:
   luxtronik2mqtt:
-    image: ghcr.io/OWNER/luxtronik2mqtt:latest
+    image: ghcr.io/hauptsmoor/luxtronik2mqtt:latest
     restart: unless-stopped
     read_only: true
     environment:
@@ -92,7 +92,7 @@ docker run -d --read-only \
   -e LUX_MQTT_HOST=mqtt.example.org -e LUX_MQTT_PORT=8883 \
   -e LUX_MQTT_TLS=true -e LUX_MQTT_CA_FILE=/ca.crt \
   -v /etc/luxtronik/ca.crt:/ca.crt:ro \
-  ghcr.io/OWNER/luxtronik2mqtt:latest
+  ghcr.io/hauptsmoor/luxtronik2mqtt:latest
 ```
 
 ## Topics
@@ -267,7 +267,7 @@ The tests run without a heat pump, against a recorded dump of a real Controller 
 The capture command ships in the image. It only reads from the Controller, never writes:
 
 ```bash
-docker run --rm ghcr.io/OWNER/luxtronik2mqtt:latest luxtronik2mqtt-capture 192.168.1.50 > luxtronik-2.1-v3.92.1.json
+docker run --rm ghcr.io/hauptsmoor/luxtronik2mqtt:latest luxtronik2mqtt-capture 192.168.1.50 > luxtronik-2.1-v3.92.1.json
 ```
 
 It reads every CFI and SHI vector and writes them to stdout as JSON. It replaces the Controller's IP address, subnet mask, broadcast address and gateway with documentation placeholders. The IP, broadcast and gateway addresses are also replaced in every other CFI register that holds them, such as the copies the Parameters keep. `--cfi-port` and `--shi-port` set other ports. If the SHI doesn't answer, the fixture holds the CFI only, and the command says so on stderr.
@@ -276,7 +276,7 @@ To submit it:
 
 1. Name the file after the Controller model and firmware, such as `luxtronik-2.1-v3.92.1.json`.
 2. Look through it before sharing. Apart from the network details, it holds your Parameters, run hours and error history.
-3. Open a pull request that adds it to `tests/fixtures/`, with a constant for it in `tests/fixtures/__init__.py`. Say which heat pump it comes from and what the Controller was doing at the time, for example idle or heating.
+3. Open a [pull request](https://github.com/hauptsmoor/luxtronik2mqtt/pulls) that adds it to `tests/fixtures/`, with a constant for it in `tests/fixtures/__init__.py`. Say which heat pump it comes from and what the Controller was doing at the time, for example idle or heating.
 
 To run the tests yourself, you need Python 3.11 or later and the [mosquitto](https://mosquitto.org/) broker, which the tests start themselves:
 
