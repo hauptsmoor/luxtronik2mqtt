@@ -36,6 +36,15 @@ def retained(port: int) -> dict[str, str]:
     return {m.topic: m.payload for m in messages}
 
 
+def latest(port: int) -> dict[str, str]:
+    """What a subscriber that connects now gets, by topic, retained or not.
+
+    For waiting on a Bridge process the test doesn't step: it may publish while the
+    subscriber connects, and a message published then arrives without the retained flag.
+    """
+    return {m.topic: m.payload for m in received_on_connect(port)}
+
+
 def received_on_connect(port: int) -> list[Message]:
     """What a subscriber that connects now gets, retained or published while it connects."""
     subscriber = Subscriber(port)
@@ -67,7 +76,7 @@ def bridge_process(port: int) -> Iterator[subprocess.Popen[bytes]]:
         stdout=subprocess.DEVNULL,
     )
     try:
-        wait_until(lambda: retained(port).get(STATUS) == "online")
+        wait_until(lambda: latest(port).get(STATUS) == "online")
         yield process
     finally:
         process.kill()
@@ -95,7 +104,7 @@ def test_when_the_bridge_dies_the_last_will_sets_its_status_offline(port: int) -
         process.kill()
         process.wait(TIMEOUT)
 
-        wait_until(lambda: retained(port)[STATUS] == "offline")
+        wait_until(lambda: latest(port).get(STATUS) == "offline")
 
 
 def test_an_unreachable_cfi_goes_offline_and_keeps_its_retained_values(port: int) -> None:
