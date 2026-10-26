@@ -16,3 +16,7 @@ There's no GitHub remote yet, so the workflow can only be checked by reading it 
 - [ ] The capture command runs from the same image and writes the fixture to stdout.
 - [ ] The container stops cleanly on SIGTERM (and publishes `offline` once ticket 06 is in).
 - [ ] The CI workflow runs the full test suite on pull requests and on pushes to `main`; its steps pass when run locally.
+
+## Comments
+
+**2026-10-26, from ticket 02:** the test suite starts the mosquitto broker as a subprocess, so the CI job needs `apt-get install mosquitto` (the binary lands in `/usr/sbin`, which `tests/harness.py` also looks in).

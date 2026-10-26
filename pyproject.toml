@@ -16,12 +16,16 @@ dependencies = [
     "luxtronik @ git+https://github.com/Bouni/python-luxtronik.git@02afea84bd5bf3ee87445de6f2a42b8029983169",
     # Imported for its error codes; the version is python-luxtronik's pin.
     "pyModbusTCP",
+    # MQTT 3.1.1 only; there is no MQTT 5 option.
+    "paho-mqtt>=2,<3",
 ]
 
 [project.optional-dependencies]
+# The tests also need the mosquitto broker on the machine (tests/harness.py).
 dev = ["pytest>=8", "mypy>=1.10"]
 
 [project.scripts]
+luxtronik2mqtt = "luxtronik2mqtt.main:main"
 luxtronik2mqtt-capture = "luxtronik2mqtt.capture:main"
 
 [tool.setuptools.packages.find]
