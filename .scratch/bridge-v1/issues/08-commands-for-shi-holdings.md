@@ -32,3 +32,7 @@ This ticket adds Holding writes to the Controller adapter and to the fake Contro
 - [ ] When the fake applies a different value than requested, the Holding topic shows the applied value and an error is published.
 - [ ] When the fake rejects the write, an error is published and the Holding topic keeps showing the value read back.
 - [ ] There is no code path that writes a CFI Parameter.
+
+## Comments
+
+- 2026-10-26, decided with the maintainer during ticket 07: the `writable` field in a Holding's `meta` topic means "a Command could set this in principle". It stays `true` whatever `LUX_SHI_WRITE` is set to, so this ticket shouldn't tie it to that setting.
